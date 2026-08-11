@@ -1,0 +1,2 @@
+ALTER TABLE conversations
+    ADD COLUMN IF NOT EXISTS cover_url VARCHAR(500);

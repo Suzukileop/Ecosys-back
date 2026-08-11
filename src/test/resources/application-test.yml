@@ -1,0 +1,48 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+app:
+  jwt:
+    secret: test-secret-key-minimum-256-bits-for-testing-purposes-only
+    expiration: 900000
+    refresh-expiration: 604800000
+  frontend-url: http://localhost:3000
+  r2:
+    enabled: false
+
+server:
+  port: 0
+
+scheduling:
+  enabled: false
+
+deepseek:
+  api-url: https://api.deepseek.com/chat/completions
+  api-key: test-deepseek-key
+  model: deepseek-chat
+  max-tokens: 500
+  temperature: 0.7
+  stub-without-key: false
+
+vpi:
+  client-id: vpi_test_client
+  client-secret: vpi_test_secret
+  key-secret: vpi_test_key
+  environment: PREPROD

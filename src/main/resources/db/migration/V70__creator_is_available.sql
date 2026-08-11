@@ -1,0 +1,2 @@
+ALTER TABLE creator_profiles
+    ADD COLUMN IF NOT EXISTS is_available BOOLEAN NOT NULL DEFAULT TRUE;

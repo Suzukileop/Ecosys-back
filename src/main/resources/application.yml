@@ -1,0 +1,121 @@
+spring:
+  datasource:
+    # options=… : réduit les avertissements JDBC liés au locale / encodage client
+    url: jdbc:postgresql://localhost:5432/noprobleme?options=-c%20client_encoding%3DUTF8
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:Pgsql_2025!Eco_Secure#X9}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-init-sql: SET client_encoding TO 'UTF8'
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      repositories:
+        enabled: false
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 520MB
+
+rate-limit:
+  # Requêtes maximum par fenêtre (1 minute) par clé
+  marketplace-public-read: 300   # GET publics : produit, reviews, similar, créateurs
+  marketplace-auth-read: 120     # GET authentifiés : ownership, reviews/me, likes perso
+  marketplace-write: 30          # POST : view, reaction, review, achat
+  auth-refresh: 120              # Augmenté : plusieurs onglets/fenêtres légitimes en parallèle
+  auth-login: 5
+  auth-signup: 3
+
+app:
+  # Expéditeur vérifié chez le fournisseur SMTP (Brevo, etc.). Si vide, spring.mail.username est utilisé.
+  mail:
+    from: ${MAIL_FROM:}
+  landing:
+    feedback-email: ${LANDING_FEEDBACK_EMAIL:leopardjuliocesar8@gmail.com}
+  # true sans clés VPI : checkout écosystème simulé (activation sans paiement réel). Défaut false.
+  payment:
+    simulate-without-vpi: ${PAYMENT_SIMULATE_WITHOUT_VPI:${PAYMENT_SIMULATE_WITHOUT_STRIPE:false}}
+  backend-public-url: ${BACKEND_PUBLIC_URL:http://localhost:8080}
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-key-minimum-256-bits-change-in-production}
+    expiration: 900000
+    refresh-expiration: 604800000
+  frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  # Origines CORS supplémentaires (séparées par des virgules), ex. http://192.168.1.42:3000
+  cors-extra-origins: ${CORS_EXTRA_ORIGINS:}
+  oauth:
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/auth/oauth/google/callback}
+  storage:
+    local-dir: ${STORAGE_LOCAL_DIR:./build/storage-uploads}
+    # Base URL utilisée pour construire demoContentUrl / refFileUrl en mode local (voir LocalDevStorageService)
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080}
+  r2:
+    # true = uploads vers Cloudflare R2 (sinon fichiers locaux + /api/storage)
+    enabled: ${R2_ENABLED:false}
+    bucket: ${R2_BUCKET:}
+    # Base S3 uniquement : https://<ACCOUNT_ID>.r2.cloudflarestorage.com (sans /nom-bucket ; retiré auto si présent)
+    endpoint: ${R2_ENDPOINT:}
+    access-key: ${R2_ACCESS_KEY:}
+    secret-key: ${R2_SECRET_KEY:}
+    # URL publique affichée au navigateur (ex. https://pub-….r2.dev ou https://media.tondomaine.com)
+    public-base-url: ${R2_PUBLIC_BASE_URL:}
+
+server:
+  port: 8080
+
+scheduling:
+  enabled: true
+
+# DeepSeek : utiliser DEEPSEEK_API_KEY en prod, ou le profil Spring "local"
+# (voir application-local.yml — fichier ignoré par Git, voir README).
+deepseek:
+  api-url: https://api.deepseek.com/chat/completions
+  api-key: ${DEEPSEEK_API_KEY:}
+  model: deepseek-chat
+  max-tokens: 500
+  temperature: 0.7
+  # true = réponses de secours si pas de clé (uniquement dev / démo, pas la vraie IA)
+  stub-without-key: false
+
+vpi:
+  client-id: ${VPI_CLIENT_ID:}
+  client-secret: ${VPI_CLIENT_SECRET:}
+  key-secret: ${VPI_KEY_SECRET:}
+  environment: ${VPI_ENV:PREPROD}
+  payment-method: ${VPI_PAYMENT_METHOD:mobile_money}
+  currency: ${VPI_CURRENCY:MGA}
+  eur-to-mga-rate: ${VPI_EUR_TO_MGA_RATE:4920}
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+---
+# Profil local : sans clés VPI, le checkout écosystème est simulé.
+# Désactiver : PAYMENT_SIMULATE_WITHOUT_VPI=false
+spring:
+  config:
+    activate:
+      on-profile: local
+app:
+  payment:
+    simulate-without-vpi: ${PAYMENT_SIMULATE_WITHOUT_VPI:${PAYMENT_SIMULATE_WITHOUT_STRIPE:true}}

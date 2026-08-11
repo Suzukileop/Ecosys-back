@@ -1,0 +1,53 @@
+package com.plateforme.marketplace.dto;
+
+import com.plateforme.marketplace.entity.DeliveryMode;
+import com.plateforme.marketplace.entity.DemoType;
+import com.plateforme.marketplace.entity.LicenseType;
+import com.plateforme.marketplace.entity.ProductType;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.UUID;
+
+public record MarketplaceProductResponse(
+        UUID id,
+        UUID creatorId,
+        String creatorName,
+        String creatorAvatarUrl,
+        ProductType type,
+        String title,
+        String description,
+        int priceCents,
+        Integer compareAtPriceCents,
+        String currency,
+        String genre,
+        String specialite,
+        String thumbnailUrl,
+        DemoType demoType,
+        String demoUrl,
+        String demoDescription,
+        List<String> demoSubtitles,
+        List<ProductWhyBlock> whyProductBlocks,
+        DeliveryMode deliveryMode,
+        LicenseType licenseType,
+        List<String> compatibleTools,
+        String fileFormat,
+        Integer fileSizeMb,
+        String language,
+        String version,
+        Integer previewLimitPercent,
+        Integer maxDownloads,
+        List<String> tags,
+        Integer videoDurationSeconds,
+        String videoResolution,
+        boolean isBestseller,
+        int views,
+        int likes,
+        int salesCount,
+        Double averageRating,
+        int reviewCount,
+        boolean isPublished,
+        boolean hasMainFile,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
+) {}

@@ -1,0 +1,66 @@
+package com.plateforme.marketplace.dto;
+
+import com.plateforme.user.dto.FaqItemDto;
+import com.plateforme.user.dto.ProfileGalleryItemDto;
+import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfileMediaBlock;
+import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileStrengthToolDto;
+import com.plateforme.user.dto.ProfileTeamMemberDto;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+public record CreatorProfileResponse(
+        UUID userId,
+        String fullName,
+        String avatarUrl,
+        String coverUrl,
+        Integer coverObjectPositionY,
+        String phone,
+        String bio,
+        String specialite,
+        String websiteUrl,
+        List<SocialLink> socialLinks,
+        boolean isVerified,
+        boolean isAvailable,
+        long portfolioCount,
+        long contentCount,
+        long productCount,
+        Double averageRating,
+        String studioHeaderLayout,
+        String studioHeaderContentStyle,
+        String studioTabNavAlign,
+        String locationCity,
+        String locationCountry,
+        List<ContentPostResponse> recentPosts,
+        long followerCount,
+        boolean isFollowing,
+        String contactEmail,
+        String availabilityHours,
+        String contactAddress,
+        boolean membersOnlyContactAvailable,
+        String languages,
+        String ctaLabel,
+        String ctaUrl,
+        String timezoneId,
+        List<ProfileMediaBlock> whyMeBlocks,
+        List<ProfileMediaBlock> experienceBlocks,
+        Integer yearsOfExperience,
+        List<ProfileStrengthToolDto> strengthsToolsMastered,
+        long profileVisits,
+        String gender,
+        List<String> spokenLanguages,
+        List<ProfileServiceDto> profileServices,
+        List<FaqItemDto> faqItems,
+        List<ProfileTeamMemberDto> teamMembers,
+        List<ProfileGalleryItemDto> galleryItems,
+        List<ProfileLinkDto> profileLinks,
+        LocalDateTime memberSince,
+        String responseTimeLabel,
+        Integer responseTimeSampleCount,
+        List<ContentPostResponse> portfolioPosts,
+        Map<String, Object> portfolioSettings
+) {}
