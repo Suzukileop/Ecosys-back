@@ -201,8 +201,6 @@ public class MarketplaceService {
                 user.getId(),
                 user.getFullName(),
                 user.getAvatarUrl(),
-                profile.getCoverUrl(),
-                profile.getCoverObjectPositionY() != null ? profile.getCoverObjectPositionY() : 50,
                 contact.phone(),
                 profile.getBio(),
                 profile.getSpecialite(),

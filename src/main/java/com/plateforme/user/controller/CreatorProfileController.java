@@ -1,6 +1,7 @@
 package com.plateforme.user.controller;
 
 import com.plateforme.user.dto.CreatorProfileDto;
+import com.plateforme.user.dto.CreatorProfileImageDto;
 import com.plateforme.user.dto.CreatorProfileVisitItemDto;
 import com.plateforme.user.dto.CreatorFollowItemDto;
 import com.plateforme.user.dto.UpdateCreatorProfileDto;
@@ -9,6 +10,7 @@ import com.plateforme.marketplace.dto.ContentPostResponse;
 import com.plateforme.user.entity.User;
 import com.plateforme.marketplace.service.CreatorProfileViewService;
 import com.plateforme.user.service.CreatorPortfolioService;
+import com.plateforme.user.service.CreatorProfileImageService;
 import com.plateforme.user.service.CreatorProfileService;
 import com.plateforme.user.service.CreatorFollowService;
 import com.plateforme.shared.dto.PagedResponse;
@@ -45,6 +47,7 @@ public class CreatorProfileController {
     private final CreatorPortfolioService creatorPortfolioService;
     private final CreatorProfileViewService creatorProfileViewService;
     private final CreatorFollowService creatorFollowService;
+    private final CreatorProfileImageService creatorProfileImageService;
 
     @Operation(summary = "Consulter mon profil créateur")
     @ApiResponses({
@@ -126,13 +129,20 @@ public class CreatorProfileController {
         return ResponseEntity.ok(creatorProfileService.updatePortfolioSettings(userId, settings));
     }
 
-    @Operation(summary = "Uploader l'image de couverture du profil créateur")
-    @PostMapping(value = "/profile/cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "List saved profile photos history")
+    @GetMapping("/profile/images")
     @PreAuthorize("hasRole('CREATOR')")
-    public ResponseEntity<CreatorProfileDto> uploadCover(@RequestParam("file") MultipartFile file)
-            throws IOException {
+    public ResponseEntity<List<CreatorProfileImageDto>> listMyProfileImages() {
         UUID userId = getCurrentUserId();
-        return ResponseEntity.ok(creatorProfileService.uploadCover(userId, file));
+        return ResponseEntity.ok(creatorProfileImageService.listForCreator(userId));
+    }
+
+    @Operation(summary = "Restore a historical profile photo or cover as the current one")
+    @PostMapping("/profile/images/{imageId}/restore")
+    @PreAuthorize("hasRole('CREATOR')")
+    public ResponseEntity<CreatorProfileImageDto> restoreMyProfileImage(@PathVariable UUID imageId) {
+        UUID userId = getCurrentUserId();
+        return ResponseEntity.ok(creatorProfileImageService.restore(userId, imageId));
     }
 
     @Operation(summary = "List profile visitors for the authenticated creator")

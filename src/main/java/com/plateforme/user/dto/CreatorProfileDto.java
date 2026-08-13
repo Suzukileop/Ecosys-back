@@ -9,8 +9,6 @@ public record CreatorProfileDto(
         UUID userId,
         String fullName,
         String avatarUrl,
-        String coverUrl,
-        Integer coverObjectPositionY,
         String bio,
         String specialite,
         String websiteUrl,

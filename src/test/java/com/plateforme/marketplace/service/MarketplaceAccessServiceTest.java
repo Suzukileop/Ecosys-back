@@ -1,14 +1,11 @@
 package com.plateforme.marketplace.service;
 
-import com.plateforme.ecosystem.storage.StorageService;
 import com.plateforme.marketplace.entity.AccessMode;
 import com.plateforme.marketplace.entity.DeliveryMode;
 import com.plateforme.marketplace.entity.MarketplaceProduct;
 import com.plateforme.marketplace.entity.MarketplacePurchase;
 import com.plateforme.marketplace.entity.MarketplacePurchaseStatus;
-import com.plateforme.marketplace.repository.ContentAccessLogRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
-import com.plateforme.marketplace.repository.MarketplacePurchaseRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +19,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -33,15 +29,6 @@ class MarketplaceAccessServiceTest {
 
     @Mock
     private MarketplaceProductRepository productRepository;
-
-    @Mock
-    private MarketplacePurchaseRepository purchaseRepository;
-
-    @Mock
-    private ContentAccessLogRepository accessLogRepository;
-
-    @Mock
-    private StorageService storageService;
 
     @InjectMocks
     private MarketplaceAccessService accessService;
@@ -61,7 +48,6 @@ class MarketplaceAccessServiceTest {
 
         product = new MarketplaceProduct();
         product.setId(UUID.randomUUID());
-        product.setMainFileR2Key("marketplace/private/file.pdf");
         product.setDeliveryMode(DeliveryMode.BOTH);
         product.setMaxDownloads(5);
 
@@ -87,20 +73,14 @@ class MarketplaceAccessServiceTest {
     }
 
     @Test
-    @DisplayName("getAccessUrl : download incrémente le compteur")
-    void getAccessUrl_downloadIncrementsCount() throws Exception {
+    @DisplayName("getAccessUrl : sans fichier produit → PRODUCT_FILE_UNAVAILABLE")
+    void getAccessUrl_noProductFile() {
         when(purchaseService.requireOwnedPurchase(buyerId, purchaseId)).thenReturn(purchase);
-        when(storageService.generateSignedDownloadUrl(anyString(), anyString(), anyInt()))
-                .thenReturn("https://signed.url/file?disposition=attachment");
 
-        var response = accessService.getAccessUrl(
-                buyerId, purchaseId, AccessMode.DOWNLOAD, "127.0.0.1", "JUnit");
-
-        assertThat(response.url()).isEqualTo("https://signed.url/file?disposition=attachment");
-        assertThat(response.accessMode()).isEqualTo(AccessMode.DOWNLOAD);
-        assertThat(response.filename()).isEqualTo("file.pdf");
-        assertThat(purchase.getDownloadCount()).isEqualTo(1);
-        verify(purchaseRepository).save(purchase);
-        verify(accessLogRepository).save(any());
+        assertThatThrownBy(() -> accessService.getAccessUrl(
+                buyerId, purchaseId, AccessMode.DOWNLOAD, "127.0.0.1", "JUnit"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("PRODUCT_FILE_UNAVAILABLE");
     }
 }

@@ -2,7 +2,6 @@ package com.plateforme.marketplace.dto;
 
 import com.plateforme.marketplace.entity.DeliveryMode;
 import com.plateforme.marketplace.entity.DemoType;
-import com.plateforme.marketplace.entity.LicenseType;
 import com.plateforme.marketplace.entity.ProductType;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -50,12 +49,7 @@ public record MarketplaceProductRequest(
 
         List<ProductWhyBlock> whyProductBlocks,
 
-        @Size(max = 500)
-        String mainFileR2Key,
-
         DeliveryMode deliveryMode,
-
-        LicenseType licenseType,
 
         List<String> compatibleTools,
 
@@ -85,7 +79,9 @@ public record MarketplaceProductRequest(
 
         Boolean isBestseller,
 
-        Boolean isPublished
+        Boolean isPublished,
+
+        List<String> galleryImageUrls
 ) {
     public MarketplaceProductRequest {
         if (currency == null || currency.isBlank()) {
@@ -97,14 +93,14 @@ public record MarketplaceProductRequest(
         if (deliveryMode == null) {
             deliveryMode = DeliveryMode.BOTH;
         }
-        if (licenseType == null) {
-            licenseType = LicenseType.PERSONAL;
-        }
         if (isPublished == null) {
             isPublished = Boolean.TRUE;
         }
         if (isBestseller == null) {
             isBestseller = Boolean.FALSE;
+        }
+        if (galleryImageUrls == null) {
+            galleryImageUrls = List.of();
         }
     }
 }

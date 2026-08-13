@@ -51,12 +51,16 @@ class ProductWhyBlocksSupportTest {
     }
 
     @Test
-    @DisplayName("normalizeBlocks requires media URL for non-empty blocks")
-    void normalizeBlocks_requiresMediaUrl() {
-        assertThrows(BusinessException.class, () -> ProductWhyBlocksSupport.normalizeBlocks(
-                List.of(new ProductWhyBlock(UUID.randomUUID(), 0, null, null, List.of("Opinion"))),
+    @DisplayName("normalizeBlocks allows text-only blocks without media")
+    void normalizeBlocks_allowsTextOnlyBlocks() {
+        List<ProductWhyBlock> result = ProductWhyBlocksSupport.normalizeBlocks(
+                List.of(new ProductWhyBlock(UUID.randomUUID(), 0, null, null, List.of("Fast setup", "Clean export"))),
                 USER_ID
-        ));
+        );
+
+        assertEquals(1, result.size());
+        assertEquals(List.of("Fast setup", "Clean export"), result.get(0).opinions());
+        assertEquals(null, result.get(0).mediaUrl());
     }
 
     @Test

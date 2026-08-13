@@ -50,7 +50,7 @@ class MarketplaceControllerTest {
     void getCreators_noAuth_200() throws Exception {
         UUID uid = UUID.randomUUID();
         CreatorProfileResponse row = new CreatorProfileResponse(
-                uid, "Name", null, null, 50, null, "bio", "specialite", null, List.of(), false, true, 0L, 0L, 0L, null,
+                uid, "Name", null, null, "bio", "specialite", null, List.of(), false, true, 0L, 0L, 0L, null,
                 "BANNER", "DEFAULT", "LEFT", null, null, List.of(), 0L, false, null, null, null, false, null, null, null, null,
                 List.of(), List.of(), null, List.of(), 0L,
                 null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(),

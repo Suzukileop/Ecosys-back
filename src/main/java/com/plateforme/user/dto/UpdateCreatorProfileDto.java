@@ -84,10 +84,6 @@ public record UpdateCreatorProfileDto(
         @Size(max = 160)
         String studioContentHeadline,
 
-        @Min(0)
-        @Max(100)
-        Integer coverObjectPositionY,
-
         List<ProfileMediaBlock> whyMeBlocks,
 
         List<ProfileMediaBlock> experienceBlocks,

@@ -26,7 +26,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 @PreAuthorize("hasRole('CREATOR')")
-@Tag(name = "Marketplace Uploads", description = "Product thumbnail and main file uploads")
+@Tag(name = "Marketplace Uploads", description = "Product thumbnail uploads")
 @SecurityRequirement(name = "bearerAuth")
 public class MarketplaceUploadController {
 
@@ -45,21 +45,6 @@ public class MarketplaceUploadController {
                 "marketplace/public", creatorId, file.getOriginalFilename());
         String url = storageService.uploadFile(file, objectKey);
         return ResponseEntity.ok(Map.of("url", url));
-    }
-
-    @Operation(summary = "Upload product main file (private object key)")
-    @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Main file uploaded"),
-            @ApiResponse(responseCode = "400", description = "Invalid file")
-    })
-    @PostMapping(value = "/main-file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Map<String, String>> uploadMainFile(@RequestParam("file") MultipartFile file)
-            throws IOException {
-        UUID creatorId = getCurrentUserId();
-        String objectKey = StorageObjectKeys.uniqueObjectKey(
-                "marketplace/private", creatorId, file.getOriginalFilename());
-        String storedKey = storageService.uploadPrivateFile(file, objectKey);
-        return ResponseEntity.ok(Map.of("objectKey", storedKey));
     }
 
     private UUID getCurrentUserId() {

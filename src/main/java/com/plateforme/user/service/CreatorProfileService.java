@@ -1,8 +1,6 @@
 package com.plateforme.user.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.plateforme.ecosystem.storage.StorageObjectKeys;
-import com.plateforme.ecosystem.storage.StorageService;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.CreatorProfileDto;
@@ -23,9 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -40,7 +36,6 @@ public class CreatorProfileService {
     private final CreatorProfileRepository creatorProfileRepository;
     private final UserRepository userRepository;
     private final CreatorPortfolioService creatorPortfolioService;
-    private final StorageService storageService;
     private final CreatorReviewService creatorReviewService;
     private final ObjectMapper objectMapper;
 
@@ -70,7 +65,6 @@ public class CreatorProfileService {
             String headline = dto.studioContentHeadline().trim();
             profile.setStudioContentHeadline(headline.isEmpty() ? null : headline);
         }
-        if (dto.coverObjectPositionY() != null) profile.setCoverObjectPositionY(dto.coverObjectPositionY());
 
         if (dto.whyMeBlocks() != null) {
             profile.setWhyMeBlocks(new ArrayList<>(
@@ -127,20 +121,6 @@ public class CreatorProfileService {
         profile = creatorProfileRepository.save(profile);
         log.debug("Profil créateur mis à jour pour user={}", userId);
 
-        long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
-        return toDto(profile, user, portfolioCount);
-    }
-
-    @Transactional
-    public CreatorProfileDto uploadCover(UUID userId, MultipartFile file) throws IOException {
-        User user = requireCreatorUser(userId);
-        CreatorProfile profile = getOrCreateProfile(user);
-        String objectKey = StorageObjectKeys.uniqueObjectKey(
-                "profiles/public", userId, "cover-" + safeFilename(file));
-        String url = storageService.uploadFile(file, objectKey);
-        profile.setCoverUrl(url);
-        profile = creatorProfileRepository.save(profile);
-        log.info("Cover image uploaded for creator user={}", userId);
         long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
         return toDto(profile, user, portfolioCount);
     }
@@ -292,8 +272,6 @@ public class CreatorProfileService {
                 user.getId(),
                 user.getFullName(),
                 user.getAvatarUrl(),
-                p.getCoverUrl(),
-                p.getCoverObjectPositionY() != null ? p.getCoverObjectPositionY() : 50,
                 p.getBio(),
                 p.getSpecialite(),
                 p.getWebsiteUrl(),
@@ -376,13 +354,5 @@ public class CreatorProfileService {
 
     private static List<ProfileLinkDto> safeLinks(List<ProfileLinkDto> links) {
         return links != null ? links : List.of();
-    }
-
-    private static String safeFilename(MultipartFile file) {
-        String name = file.getOriginalFilename();
-        if (name == null || name.isBlank()) {
-            return "cover.jpg";
-        }
-        return name.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }

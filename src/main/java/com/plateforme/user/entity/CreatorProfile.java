@@ -57,12 +57,6 @@ public class CreatorProfile {
     @Column(name = "social_links", columnDefinition = "jsonb")
     private String socialLinks;
 
-    @Column(name = "cover_url", length = 500)
-    private String coverUrl;
-
-    @Column(name = "cover_object_position_y", nullable = false)
-    private Integer coverObjectPositionY = 50;
-
     @Column(name = "location_city", length = 150)
     private String locationCity;
 

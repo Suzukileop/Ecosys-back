@@ -39,10 +39,6 @@ public class MarketplaceProductService {
     @Transactional
     public MarketplaceProductResponse createProduct(UUID creatorId, MarketplaceProductRequest req) {
         User creator = requireCreator(creatorId);
-        if (req.mainFileR2Key() == null || req.mainFileR2Key().isBlank()) {
-            throw new BusinessException("MAIN_FILE_REQUIRED",
-                    "Upload a product file before publishing (main file is required).");
-        }
         MarketplaceProduct product = new MarketplaceProduct();
         product.setCreator(creator);
         applyRequest(product, req);
@@ -188,12 +184,6 @@ public class MarketplaceProductService {
     @Transactional
     public MarketplaceProductResponse setPublished(UUID creatorId, UUID productId, boolean published) {
         MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
-        if (published) {
-            if (product.getMainFileR2Key() == null || product.getMainFileR2Key().isBlank()) {
-                throw new BusinessException("MAIN_FILE_REQUIRED",
-                        "Upload a product file before publishing.");
-            }
-        }
         product.setIsPublished(published);
         product = productRepository.save(product);
         log.info("Marketplace product id={} published={} by creator={}", productId, published, creatorId);
@@ -245,6 +235,13 @@ public class MarketplaceProductService {
 
         List<String> tools = req.compatibleTools() != null ? req.compatibleTools() : List.of();
         List<String> tags = req.tags() != null ? req.tags() : List.of();
+        List<String> galleryUrls = req.galleryImageUrls() != null
+                ? req.galleryImageUrls().stream()
+                    .filter(url -> url != null && !url.isBlank())
+                    .map(String::trim)
+                    .limit(12)
+                    .toList()
+                : List.of();
 
         product.setType(req.type());
         product.setTitle(req.title());
@@ -266,11 +263,7 @@ public class MarketplaceProductService {
             product.setWhyProductBlocks(new ArrayList<>(
                     ProductWhyBlocksSupport.normalizeBlocks(req.whyProductBlocks(), product.getCreator().getId())));
         }
-        if (req.mainFileR2Key() != null && !req.mainFileR2Key().isBlank()) {
-            product.setMainFileR2Key(req.mainFileR2Key().trim());
-        }
         product.setDeliveryMode(req.deliveryMode());
-        product.setLicenseType(req.licenseType());
         product.setCompatibleTools(new ArrayList<>(tools));
         product.setFileFormat(req.fileFormat());
         product.setFileSizeMb(req.fileSizeMb());
@@ -279,6 +272,7 @@ public class MarketplaceProductService {
         product.setPreviewLimitPercent(req.previewLimitPercent());
         product.setMaxDownloads(req.maxDownloads());
         product.setTags(new ArrayList<>(tags));
+        product.setGalleryImageUrls(new ArrayList<>(galleryUrls));
         product.setCompareAtPriceCents(req.compareAtPriceCents());
         product.setVideoDurationSeconds(req.videoDurationSeconds());
         product.setVideoResolution(req.videoResolution());
@@ -290,6 +284,7 @@ public class MarketplaceProductService {
         User creator = product.getCreator();
         List<String> tools = product.getCompatibleTools() != null ? product.getCompatibleTools() : List.of();
         List<String> tags = product.getTags() != null ? product.getTags() : List.of();
+        List<String> galleryUrls = product.getGalleryImageUrls() != null ? product.getGalleryImageUrls() : List.of();
         List<com.plateforme.marketplace.dto.ProductWhyBlock> whyBlocks = product.getWhyProductBlocks() != null
                 ? product.getWhyProductBlocks() : List.of();
         List<String> demoSubtitles = resolveDemoSubtitles(product);
@@ -314,7 +309,6 @@ public class MarketplaceProductService {
                 demoSubtitles,
                 whyBlocks,
                 product.getDeliveryMode(),
-                product.getLicenseType(),
                 tools,
                 product.getFileFormat(),
                 product.getFileSizeMb(),
@@ -332,9 +326,9 @@ public class MarketplaceProductService {
                 product.getAverageRating(),
                 product.getReviewCount() != null ? product.getReviewCount() : 0,
                 Boolean.TRUE.equals(product.getIsPublished()),
-                product.getMainFileR2Key() != null && !product.getMainFileR2Key().isBlank(),
                 product.getCreatedAt(),
-                product.getUpdatedAt()
+                product.getUpdatedAt(),
+                galleryUrls
         );
     }
 

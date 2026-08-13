@@ -35,24 +35,25 @@ public final class ProductWhyBlocksSupport {
             if (mediaUrl == null && opinions.isEmpty()) {
                 continue;
             }
-            if (mediaUrl == null) {
-                throw new BusinessException("WHY_BLOCK_MEDIA_URL_REQUIRED",
-                        "Each why-product block must include a media URL.");
-            }
-            String mediaType = blankToNull(block.mediaType());
-            if (mediaType == null) {
-                throw new BusinessException("WHY_BLOCK_MEDIA_TYPE_REQUIRED",
-                        "Each why-product block must include a media type.");
-            }
-            if (!"IMAGE".equals(mediaType) && !"VIDEO".equals(mediaType)) {
-                throw new BusinessException("WHY_BLOCK_MEDIA_TYPE_INVALID",
-                        "Media type must be IMAGE or VIDEO.");
-            }
             if (opinions.isEmpty()) {
                 throw new BusinessException("WHY_BLOCK_OPINIONS_REQUIRED",
-                        "Each why-product block must include at least one opinion.");
+                        "Each why-product block must include at least one text line.");
             }
-            OwnedMediaUrlValidator.validate(mediaUrl, userId);
+
+            String mediaType = null;
+            if (mediaUrl != null) {
+                mediaType = blankToNull(block.mediaType());
+                if (mediaType == null) {
+                    throw new BusinessException("WHY_BLOCK_MEDIA_TYPE_REQUIRED",
+                            "Each media why-product block must include a media type.");
+                }
+                if (!"IMAGE".equals(mediaType) && !"VIDEO".equals(mediaType)) {
+                    throw new BusinessException("WHY_BLOCK_MEDIA_TYPE_INVALID",
+                            "Media type must be IMAGE or VIDEO.");
+                }
+                OwnedMediaUrlValidator.validate(mediaUrl, userId);
+            }
+
             UUID id = block.id() != null ? block.id() : UUID.randomUUID();
             int sortOrder = block.sortOrder() >= 0 ? block.sortOrder() : i;
             normalized.add(new ProductWhyBlock(id, sortOrder, mediaUrl, mediaType, opinions));

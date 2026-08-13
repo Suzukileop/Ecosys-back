@@ -3,7 +3,6 @@ package com.plateforme.marketplace.service;
 import com.plateforme.marketplace.dto.MarketplaceProductRequest;
 import com.plateforme.marketplace.entity.DeliveryMode;
 import com.plateforme.marketplace.entity.DemoType;
-import com.plateforme.marketplace.entity.LicenseType;
 import com.plateforme.marketplace.entity.MarketplaceProduct;
 import com.plateforme.marketplace.entity.ProductType;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
@@ -95,34 +94,13 @@ class MarketplaceProductServiceTest {
     }
 
     @Test
-    @DisplayName("setPublished : sans fichier principal → BusinessException")
-    void setPublished_missingMainFile() {
-        UUID productId = UUID.randomUUID();
-        MarketplaceProduct product = new MarketplaceProduct();
-        product.setId(productId);
-        product.setCreator(creator);
-        product.setIsPublished(false);
-        product.setMainFileR2Key(null);
-
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
-
-        assertThatThrownBy(() -> productService.setPublished(creatorId, productId, true))
-                .isInstanceOf(BusinessException.class)
-                .extracting("code")
-                .isEqualTo("MAIN_FILE_REQUIRED");
-
-        verify(productRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("setPublished : avec fichier → publié")
+    @DisplayName("setPublished : publie sans fichier principal")
     void setPublished_success() {
         UUID productId = UUID.randomUUID();
         MarketplaceProduct product = new MarketplaceProduct();
         product.setId(productId);
         product.setCreator(creator);
         product.setIsPublished(false);
-        product.setMainFileR2Key("marketplace/private/file.pdf");
         product.setTitle("Title");
         product.setType(ProductType.PDF);
         product.setPriceCents(1000);
@@ -157,9 +135,7 @@ class MarketplaceProductServiceTest {
                 null,
                 List.of(),
                 List.of(),
-                "marketplace/private/key.pdf",
                 DeliveryMode.BOTH,
-                LicenseType.PERSONAL,
                 List.of(),
                 "PDF",
                 5,
@@ -172,7 +148,8 @@ class MarketplaceProductServiceTest {
                 null,
                 null,
                 false,
-                false
+                false,
+                List.of()
         );
 
         assertThatThrownBy(() -> productService.createProduct(creatorId, req))
@@ -198,9 +175,7 @@ class MarketplaceProductServiceTest {
                 null,
                 List.of(),
                 List.of(),
-                "marketplace/private/key.pdf",
                 DeliveryMode.BOTH,
-                LicenseType.PERSONAL,
                 List.of(),
                 "PDF",
                 5,
@@ -213,7 +188,8 @@ class MarketplaceProductServiceTest {
                 null,
                 null,
                 false,
-                false
+                false,
+                List.of()
         );
     }
 }

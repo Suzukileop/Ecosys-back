@@ -2,7 +2,6 @@ package com.plateforme.marketplace.dto;
 
 import com.plateforme.marketplace.entity.DeliveryMode;
 import com.plateforme.marketplace.entity.DemoType;
-import com.plateforme.marketplace.entity.LicenseType;
 import com.plateforme.marketplace.entity.ProductType;
 
 import java.time.LocalDateTime;
@@ -29,7 +28,6 @@ public record MarketplaceProductResponse(
         List<String> demoSubtitles,
         List<ProductWhyBlock> whyProductBlocks,
         DeliveryMode deliveryMode,
-        LicenseType licenseType,
         List<String> compatibleTools,
         String fileFormat,
         Integer fileSizeMb,
@@ -47,7 +45,7 @@ public record MarketplaceProductResponse(
         Double averageRating,
         int reviewCount,
         boolean isPublished,
-        boolean hasMainFile,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        List<String> galleryImageUrls
 ) {}

@@ -25,6 +25,7 @@ public class UserProfileService {
     private final UserRepository userRepository;
     private final StorageService storageService;
     private final AuthService authService;
+    private final CreatorProfileImageService creatorProfileImageService;
 
     @Transactional(readOnly = true)
     public UserDto getMyProfile(UUID userId) {
@@ -53,6 +54,9 @@ public class UserProfileService {
         String objectKey = StorageObjectKeys.uniqueObjectKey(
                 "profiles/public", userId, file.getOriginalFilename());
         String url = storageService.uploadFile(file, objectKey);
+        // Keep previous and new URLs in history (never drop prior profile photos).
+        creatorProfileImageService.record(userId, user.getAvatarUrl());
+        creatorProfileImageService.record(userId, url);
         user.setAvatarUrl(url);
         user = userRepository.save(user);
         log.info("Avatar uploaded user={}", userId);

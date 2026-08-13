@@ -17,8 +17,6 @@ public record CreatorProfileResponse(
         UUID userId,
         String fullName,
         String avatarUrl,
-        String coverUrl,
-        Integer coverObjectPositionY,
         String phone,
         String bio,
         String specialite,

@@ -74,16 +74,9 @@ public class MarketplaceProduct {
     @Column(name = "why_product_blocks", columnDefinition = "jsonb", nullable = false)
     private List<ProductWhyBlock> whyProductBlocks = new ArrayList<>();
 
-    @Column(name = "main_file_r2_key", nullable = false, length = 500)
-    private String mainFileR2Key;
-
     @Enumerated(EnumType.STRING)
     @Column(name = "delivery_mode", nullable = false, length = 20)
     private DeliveryMode deliveryMode = DeliveryMode.BOTH;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "license_type", nullable = false, length = 20)
-    private LicenseType licenseType = LicenseType.PERSONAL;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "compatible_tools", columnDefinition = "jsonb")
@@ -110,6 +103,10 @@ public class MarketplaceProduct {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private List<String> tags = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "gallery_image_urls", columnDefinition = "jsonb", nullable = false)
+    private List<String> galleryImageUrls = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bundle_id")
@@ -183,6 +180,9 @@ public class MarketplaceProduct {
         }
         if (demoSubtitles == null) {
             demoSubtitles = new ArrayList<>();
+        }
+        if (galleryImageUrls == null) {
+            galleryImageUrls = new ArrayList<>();
         }
     }
 
