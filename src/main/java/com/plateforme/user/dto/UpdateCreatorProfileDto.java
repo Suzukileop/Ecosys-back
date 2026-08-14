@@ -84,6 +84,18 @@ public record UpdateCreatorProfileDto(
         @Size(max = 160)
         String studioContentHeadline,
 
+        @Size(max = 120)
+        String shopName,
+
+        @Size(max = 200)
+        String shopSellingFocus,
+
+        @Size(max = 2000)
+        String shopDescription,
+
+        @Size(max = 1000)
+        String shopCoverUrl,
+
         List<ProfileMediaBlock> whyMeBlocks,
 
         List<ProfileMediaBlock> experienceBlocks,
@@ -96,6 +108,9 @@ public record UpdateCreatorProfileDto(
 
         @Size(max = 50)
         String gender,
+
+        @Pattern(regexp = "GENERAL_MEMBER|SERVICE_PROVIDER|FREELANCER_STUDENT|JOB_SEEKER|RH_RECRUITER")
+        String appRole,
 
         List<String> spokenLanguages,
 

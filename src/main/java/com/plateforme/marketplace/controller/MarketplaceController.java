@@ -3,7 +3,9 @@ package com.plateforme.marketplace.controller;
 import com.plateforme.marketplace.dto.ContentPostResponse;
 import com.plateforme.marketplace.dto.CreatorProfileResponse;
 import com.plateforme.marketplace.dto.MarketplaceProductResponse;
+import com.plateforme.marketplace.dto.ProductGroupResponse;
 import com.plateforme.marketplace.dto.ProductPreviewResponse;
+import com.plateforme.marketplace.service.MarketplaceProductGroupService;
 import com.plateforme.marketplace.entity.ProductType;
 import com.plateforme.marketplace.dto.CreatorProfileViewResponse;
 import com.plateforme.marketplace.dto.RecordCreatorProfileViewRequest;
@@ -54,6 +56,7 @@ public class MarketplaceController {
     private final ContentPostService contentPostService;
     private final MarketplaceProductService productService;
     private final MarketplaceAccessService accessService;
+    private final MarketplaceProductGroupService productGroupService;
     private final CreatorReviewService creatorReviewService;
     private final CreatorFollowService creatorFollowService;
     private final CreatorProfileViewService creatorProfileViewService;
@@ -108,6 +111,20 @@ public class MarketplaceController {
             Authentication authentication) {
         UUID viewerUserId = resolveViewerUserId(authentication);
         return ResponseEntity.ok(marketplaceService.getCreatorPublicProfile(id, viewerUserId));
+    }
+
+    @Operation(summary = "List public product catalogues for a creator")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Catalogue list"),
+            @ApiResponse(responseCode = "404", description = "Creator not found")
+    })
+    @GetMapping("/creators/{id}/product-groups")
+    public ResponseEntity<PagedResponse<ProductGroupResponse>> getCreatorProductGroups(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+        Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 100));
+        return ResponseEntity.ok(PagedResponse.fromPage(productGroupService.getPublicGroups(id, pageable)));
     }
 
     @Operation(summary = "Record a visit on a creator public profile")
@@ -189,6 +206,7 @@ public class MarketplaceController {
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Integer minPriceCents,
             @RequestParam(required = false) Integer maxPriceCents,
+            @RequestParam(required = false) String format,
             @RequestParam(defaultValue = "popular") String sort,
             @RequestParam(defaultValue = "false") boolean favoritesOnly,
             @RequestParam(defaultValue = "0") int page,
@@ -205,7 +223,7 @@ public class MarketplaceController {
         }
         return ResponseEntity.ok(PagedResponse.fromPage(
                 productService.getPublishedProducts(
-                        creatorId, type, genre, q, minPriceCents, maxPriceCents, favoritesUserId, pageable)));
+                        creatorId, type, genre, q, minPriceCents, maxPriceCents, favoritesUserId, format, pageable)));
     }
 
     private Sort resolveProductSort(String sort) {

@@ -47,6 +47,21 @@ public class MarketplaceUploadController {
         return ResponseEntity.ok(Map.of("url", url));
     }
 
+    @Operation(summary = "Upload shop cover media (image or short video, public URL)")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Shop cover uploaded"),
+            @ApiResponse(responseCode = "400", description = "Invalid file")
+    })
+    @PostMapping(value = "/shop-cover", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<Map<String, String>> uploadShopCover(@RequestParam("file") MultipartFile file)
+            throws IOException {
+        UUID creatorId = getCurrentUserId();
+        String objectKey = StorageObjectKeys.uniqueObjectKey(
+                "marketplace/public", creatorId, file.getOriginalFilename());
+        String url = storageService.uploadFile(file, objectKey);
+        return ResponseEntity.ok(Map.of("url", url));
+    }
+
     private UUID getCurrentUserId() {
         User user = (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return user.getId();

@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -15,6 +17,8 @@ import java.util.UUID;
 public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, UUID> {
 
     Optional<CreatorProfile> findByUserId(UUID userId);
+
+    List<CreatorProfile> findByUser_IdIn(Collection<UUID> userIds);
 
     @Query("""
             SELECT cp FROM CreatorProfile cp JOIN cp.user u
@@ -27,8 +31,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     @Query("""
             SELECT cp FROM CreatorProfile cp JOIN cp.user u
             WHERE u.deletedAt IS NULL
+            AND COALESCE(cp.appRole, 'GENERAL_MEMBER') = 'SERVICE_PROVIDER'
             AND (LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                 OR LOWER(COALESCE(cp.shopName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                  OR LOWER(COALESCE(u.fullName, '')) LIKE LOWER(CONCAT('%', :q, '%')))
             AND (:available IS NULL OR COALESCE(cp.isAvailable, true) = :available)
             """)
@@ -40,6 +46,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     @Query("""
             SELECT cp FROM CreatorProfile cp JOIN cp.user u
             WHERE u.deletedAt IS NULL
+            AND COALESCE(cp.appRole, 'GENERAL_MEMBER') = 'SERVICE_PROVIDER'
             AND (:specialite IS NULL OR :specialite = '' OR LOWER(cp.specialite) LIKE LOWER(CONCAT('%', :specialite, '%')))
             AND (:verified IS NULL OR cp.isVerified = :verified)
             AND (:available IS NULL OR COALESCE(cp.isAvailable, true) = :available)

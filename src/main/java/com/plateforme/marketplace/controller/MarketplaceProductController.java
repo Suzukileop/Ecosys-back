@@ -91,6 +91,30 @@ public class MarketplaceProductController {
         return ResponseEntity.ok(productService.setPublished(getCurrentUserId(), id, false));
     }
 
+    @Operation(summary = "Pin marketplace product to the top of listings")
+    @PatchMapping("/{id}/pin")
+    public ResponseEntity<MarketplaceProductResponse> pinProduct(@PathVariable UUID id) {
+        return ResponseEntity.ok(productService.setPinned(getCurrentUserId(), id, true));
+    }
+
+    @Operation(summary = "Unpin marketplace product")
+    @PatchMapping("/{id}/unpin")
+    public ResponseEntity<MarketplaceProductResponse> unpinProduct(@PathVariable UUID id) {
+        return ResponseEntity.ok(productService.setPinned(getCurrentUserId(), id, false));
+    }
+
+    @Operation(summary = "Mark marketplace product as bestseller")
+    @PatchMapping("/{id}/bestseller")
+    public ResponseEntity<MarketplaceProductResponse> markBestseller(@PathVariable UUID id) {
+        return ResponseEntity.ok(productService.setBestseller(getCurrentUserId(), id, true));
+    }
+
+    @Operation(summary = "Remove bestseller mark from marketplace product")
+    @PatchMapping("/{id}/unbestseller")
+    public ResponseEntity<MarketplaceProductResponse> unmarkBestseller(@PathVariable UUID id) {
+        return ResponseEntity.ok(productService.setBestseller(getCurrentUserId(), id, false));
+    }
+
     private UUID getCurrentUserId() {
         User user = (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return user.getId();

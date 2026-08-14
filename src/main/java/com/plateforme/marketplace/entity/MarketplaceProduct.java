@@ -151,6 +151,10 @@ public class MarketplaceProduct {
     @Column(name = "is_bestseller", nullable = false)
     private Boolean isBestseller = false;
 
+    /** When set, product is pinned to the top of the creator's listings. */
+    @Column(name = "pinned_at")
+    private LocalDateTime pinnedAt;
+
     @Column(name = "review_count", nullable = false)
     private Integer reviewCount = 0;
 

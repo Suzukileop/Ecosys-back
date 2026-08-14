@@ -18,6 +18,18 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
 
     Page<MarketplaceProduct> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
 
+    @Query("""
+            SELECT p FROM MarketplaceProduct p
+            WHERE p.creator.id = :creatorId
+            ORDER BY CASE WHEN p.pinnedAt IS NULL THEN 1 ELSE 0 END ASC,
+                     p.pinnedAt DESC NULLS LAST,
+                     CASE WHEN p.isBestseller = true THEN 0 ELSE 1 END ASC,
+                     p.createdAt DESC
+            """)
+    Page<MarketplaceProduct> findByCreatorIdPinnedFirst(
+            @Param("creatorId") UUID creatorId,
+            Pageable pageable);
+
     long countByCreator_IdAndIsPublishedTrue(UUID creatorId);
 
     Optional<MarketplaceProduct> findByIdAndIsPublishedTrue(UUID id);
@@ -31,7 +43,13 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
             AND (:q IS NULL OR :q = ''
                 OR LOWER(p.title) LIKE LOWER(CONCAT('%', :q, '%'))
                 OR LOWER(COALESCE(p.description, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR LOWER(CAST(p.tags AS string)) LIKE LOWER(CONCAT('%', :q, '%')))
+                OR LOWER(CAST(p.tags AS string)) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(COALESCE(p.creator.fullName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR EXISTS (
+                    SELECT 1 FROM CreatorProfile cp
+                    WHERE cp.user.id = p.creator.id
+                    AND LOWER(COALESCE(cp.shopName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                ))
             AND (:freeOnly = true AND p.priceCents = 0
                 OR :freeOnly = false
                     AND (:minPriceCents IS NULL OR p.priceCents >= :minPriceCents)
@@ -42,6 +60,12 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
                 AND f.targetType = :favoriteTargetType
                 AND f.user.id = :userId
             ))
+            AND (:physicalOnly = false OR p.type = com.plateforme.marketplace.entity.ProductType.PHYSICAL)
+            AND (:virtualOnly = false OR p.type <> com.plateforme.marketplace.entity.ProductType.PHYSICAL)
+            ORDER BY CASE WHEN p.pinnedAt IS NULL THEN 1 ELSE 0 END ASC,
+                     p.pinnedAt DESC NULLS LAST,
+                     CASE WHEN p.isBestseller = true THEN 0 ELSE 1 END ASC,
+                     p.createdAt DESC
             """)
     Page<MarketplaceProduct> findPublishedFiltered(
             @Param("creatorId") UUID creatorId,
@@ -53,5 +77,7 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
             @Param("maxPriceCents") Integer maxPriceCents,
             @Param("userId") UUID userId,
             @Param("favoriteTargetType") ContentTargetType favoriteTargetType,
+            @Param("physicalOnly") boolean physicalOnly,
+            @Param("virtualOnly") boolean virtualOnly,
             Pageable pageable);
 }

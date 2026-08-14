@@ -197,6 +197,9 @@ public class MarketplaceService {
             long followerCount,
             boolean isFollowing,
             List<ContentPostResponse> portfolioPosts) {
+        long serviceCount = profile.getProfileServices() != null
+                ? profile.getProfileServices().size()
+                : 0L;
         return new CreatorProfileResponse(
                 user.getId(),
                 user.getFullName(),
@@ -211,6 +214,7 @@ public class MarketplaceService {
                 portfolioCount,
                 contentCount,
                 productCount,
+                serviceCount,
                 averageRating,
                 profile.getStudioHeaderLayout() != null ? profile.getStudioHeaderLayout() : "BANNER",
                 profile.getStudioHeaderContentStyle() != null ? profile.getStudioHeaderContentStyle() : "DEFAULT",
@@ -244,7 +248,11 @@ public class MarketplaceService {
                 contact.responseTimeLabel(),
                 contact.responseTimeSampleCount(),
                 portfolioPosts.isEmpty() ? List.of() : List.copyOf(portfolioPosts),
-                PortfolioSettingsSupport.read(profile)
+                PortfolioSettingsSupport.read(profile),
+                blankToNull(profile.getShopName()),
+                blankToNull(profile.getShopSellingFocus()),
+                blankToNull(profile.getShopDescription()),
+                blankToNull(profile.getShopCoverUrl())
         );
     }
 

@@ -83,6 +83,51 @@ public final class ProfileExtensionsSupport {
         return trimmed;
     }
 
+    public static final String DEFAULT_APP_ROLE = "GENERAL_MEMBER";
+
+    private static final Set<String> APP_ROLES = Set.of(
+            "GENERAL_MEMBER",
+            "SERVICE_PROVIDER",
+            "FREELANCER_STUDENT",
+            "JOB_SEEKER",
+            "RH_RECRUITER"
+    );
+
+    /**
+     * Platform experience role (Information → My Role). Always returns a valid enum value.
+     */
+    public static String normalizeAppRole(String raw) {
+        if (raw == null) {
+            return DEFAULT_APP_ROLE;
+        }
+        String trimmed = raw.trim();
+        if (trimmed.isEmpty()) {
+            return DEFAULT_APP_ROLE;
+        }
+        String token = trimmed.toUpperCase(Locale.ROOT).replaceAll("[\\s-]+", "_");
+        if (APP_ROLES.contains(token)) {
+            return token;
+        }
+        String key = Normalizer.normalize(trimmed.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        if (key.contains("service") || key.contains("provider")) {
+            return "SERVICE_PROVIDER";
+        }
+        if (key.contains("freelancer") || key.contains("student")) {
+            return "FREELANCER_STUDENT";
+        }
+        if (key.contains("job") || key.contains("seeker")) {
+            return "JOB_SEEKER";
+        }
+        if (key.contains("recruiter") || key.equals("rh") || key.startsWith("rh ")) {
+            return "RH_RECRUITER";
+        }
+        if (key.contains("general") || key.contains("member")) {
+            return "GENERAL_MEMBER";
+        }
+        return DEFAULT_APP_ROLE;
+    }
+
     public static String normalizeGender(String raw) {
         if (raw == null) {
             return null;

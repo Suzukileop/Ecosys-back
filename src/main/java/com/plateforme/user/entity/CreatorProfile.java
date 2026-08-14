@@ -78,6 +78,10 @@ public class CreatorProfile {
     @Column(length = 50)
     private String gender;
 
+    /** App experience role: GENERAL_MEMBER (default), SERVICE_PROVIDER, FREELANCER_STUDENT, JOB_SEEKER, RH_RECRUITER. */
+    @Column(name = "app_role", nullable = false, length = 40)
+    private String appRole = "GENERAL_MEMBER";
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "spoken_languages", columnDefinition = "jsonb", nullable = false)
     private List<String> spokenLanguages = new ArrayList<>();
@@ -163,6 +167,22 @@ public class CreatorProfile {
     /** Custom Content tab headline in Creator Studio (empty/null = default). */
     @Column(name = "studio_content_headline", length = 160)
     private String studioContentHeadline;
+
+    /** Public boutique / shop name for all marketplace products (Explore search + display). */
+    @Column(name = "shop_name", length = 120)
+    private String shopName;
+
+    /** Short answer to "What do you sell?" shown on the public shop. */
+    @Column(name = "shop_selling_focus", length = 200)
+    private String shopSellingFocus;
+
+    /** Public shop description. */
+    @Column(name = "shop_description", length = 2000)
+    private String shopDescription;
+
+    /** Public shop cover media URL (image or short video). */
+    @Column(name = "shop_cover_url", length = 1000)
+    private String shopCoverUrl;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "why_me_blocks", columnDefinition = "jsonb", nullable = false)

@@ -7,7 +7,9 @@ import com.plateforme.marketplace.entity.MarketplaceProduct;
 import com.plateforme.marketplace.entity.ProductType;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.shared.exception.BusinessException;
+import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.User;
+import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
 import com.plateforme.marketplace.service.ProductWhyBlocksSupport;
@@ -24,7 +26,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -35,6 +39,7 @@ public class MarketplaceProductService {
 
     private final MarketplaceProductRepository productRepository;
     private final UserRepository userRepository;
+    private final CreatorProfileRepository creatorProfileRepository;
 
     @Transactional
     public MarketplaceProductResponse createProduct(UUID creatorId, MarketplaceProductRequest req) {
@@ -63,8 +68,10 @@ public class MarketplaceProductService {
 
     @Transactional(readOnly = true)
     public Page<MarketplaceProductResponse> getMyProducts(UUID creatorId, Pageable pageable) {
-        return productRepository.findByCreator_IdOrderByCreatedAtDesc(creatorId, pageable)
-                .map(this::toResponse);
+        Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<MarketplaceProduct> page = productRepository.findByCreatorIdPinnedFirst(creatorId, unsorted);
+        Map<UUID, String> shopNames = loadShopNames(page.getContent());
+        return page.map(product -> toResponse(product, shopNames.get(product.getCreator().getId())));
     }
 
     @Transactional(readOnly = true)
@@ -84,14 +91,17 @@ public class MarketplaceProductService {
             Integer minPriceCents,
             Integer maxPriceCents,
             UUID favoritesUserId,
+            String format,
             Pageable pageable) {
         String g = genre != null && !genre.isBlank() ? genre.trim() : null;
         String q = keyword != null && !keyword.isBlank() ? keyword.trim() : null;
         boolean freeOnly = minPriceCents != null && maxPriceCents != null
                 && minPriceCents == 0 && maxPriceCents == 0;
-        return productRepository.findPublishedFiltered(
+        boolean physicalOnly = "physical".equalsIgnoreCase(format);
+        boolean virtualOnly = "virtual".equalsIgnoreCase(format);
+        Page<MarketplaceProduct> page = productRepository.findPublishedFiltered(
                         creatorId,
-                        type,
+                        physicalOnly ? ProductType.PHYSICAL : type,
                         g,
                         q,
                         freeOnly,
@@ -99,8 +109,11 @@ public class MarketplaceProductService {
                         freeOnly ? null : maxPriceCents,
                         favoritesUserId,
                         ContentTargetType.PRODUCT,
-                        pageable)
-                .map(this::toResponse);
+                        physicalOnly,
+                        virtualOnly,
+                        pageable);
+        Map<UUID, String> shopNames = loadShopNames(page.getContent());
+        return page.map(product -> toResponse(product, shopNames.get(product.getCreator().getId())));
     }
 
     @Transactional(readOnly = true)
@@ -130,9 +143,10 @@ public class MarketplaceProductService {
                     ranked, productId, limit, pageable, null, source.getType(), null, null);
         }
 
-        return ranked.values().stream()
-                .limit(limit)
-                .map(this::toResponse)
+        List<MarketplaceProduct> products = ranked.values().stream().limit(limit).toList();
+        Map<UUID, String> shopNames = loadShopNames(products);
+        return products.stream()
+                .map(product -> toResponse(product, shopNames.get(product.getCreator().getId())))
                 .toList();
     }
 
@@ -160,6 +174,8 @@ public class MarketplaceProductService {
                 null,
                 null,
                 ContentTargetType.PRODUCT,
+                false,
+                false,
                 pageable);
         for (MarketplaceProduct candidate : page.getContent()) {
             if (candidate.getId().equals(excludeProductId)) {
@@ -187,6 +203,24 @@ public class MarketplaceProductService {
         product.setIsPublished(published);
         product = productRepository.save(product);
         log.info("Marketplace product id={} published={} by creator={}", productId, published, creatorId);
+        return toResponse(product);
+    }
+
+    @Transactional
+    public MarketplaceProductResponse setPinned(UUID creatorId, UUID productId, boolean pinned) {
+        MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        product.setPinnedAt(pinned ? LocalDateTime.now() : null);
+        product = productRepository.save(product);
+        log.info("Marketplace product id={} pinned={} by creator={}", productId, pinned, creatorId);
+        return toResponse(product);
+    }
+
+    @Transactional
+    public MarketplaceProductResponse setBestseller(UUID creatorId, UUID productId, boolean bestseller) {
+        MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        product.setIsBestseller(bestseller);
+        product = productRepository.save(product);
+        log.info("Marketplace product id={} bestseller={} by creator={}", productId, bestseller, creatorId);
         return toResponse(product);
     }
 
@@ -281,6 +315,14 @@ public class MarketplaceProductService {
     }
 
     MarketplaceProductResponse toResponse(MarketplaceProduct product) {
+        String shopName = null;
+        if (product.getCreator() != null && product.getCreator().getId() != null) {
+            shopName = loadShopNames(List.of(product)).get(product.getCreator().getId());
+        }
+        return toResponse(product, shopName);
+    }
+
+    MarketplaceProductResponse toResponse(MarketplaceProduct product, String shopName) {
         User creator = product.getCreator();
         List<String> tools = product.getCompatibleTools() != null ? product.getCompatibleTools() : List.of();
         List<String> tags = product.getTags() != null ? product.getTags() : List.of();
@@ -288,12 +330,15 @@ public class MarketplaceProductService {
         List<com.plateforme.marketplace.dto.ProductWhyBlock> whyBlocks = product.getWhyProductBlocks() != null
                 ? product.getWhyProductBlocks() : List.of();
         List<String> demoSubtitles = resolveDemoSubtitles(product);
+        String authorName = creator.getFullName();
+        String resolvedShopName = (shopName != null && !shopName.isBlank()) ? shopName.trim() : null;
 
         return new MarketplaceProductResponse(
                 product.getId(),
                 creator.getId(),
-                creator.getFullName(),
+                authorName,
                 creator.getAvatarUrl(),
+                resolvedShopName,
                 product.getType(),
                 product.getTitle(),
                 product.getDescription(),
@@ -320,6 +365,7 @@ public class MarketplaceProductService {
                 product.getVideoDurationSeconds(),
                 product.getVideoResolution(),
                 Boolean.TRUE.equals(product.getIsBestseller()),
+                product.getPinnedAt() != null,
                 product.getViews() != null ? product.getViews() : 0,
                 product.getLikes() != null ? product.getLikes() : 0,
                 product.getSalesCount() != null ? product.getSalesCount() : 0,
@@ -330,6 +376,30 @@ public class MarketplaceProductService {
                 product.getUpdatedAt(),
                 galleryUrls
         );
+    }
+
+    private Map<UUID, String> loadShopNames(List<MarketplaceProduct> products) {
+        Map<UUID, String> shopNames = new HashMap<>();
+        if (products == null || products.isEmpty()) {
+            return shopNames;
+        }
+        List<UUID> creatorIds = products.stream()
+                .map(MarketplaceProduct::getCreator)
+                .filter(Objects::nonNull)
+                .map(User::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (creatorIds.isEmpty()) {
+            return shopNames;
+        }
+        for (CreatorProfile profile : creatorProfileRepository.findByUser_IdIn(creatorIds)) {
+            if (profile.getUser() != null && profile.getUser().getId() != null
+                    && profile.getShopName() != null && !profile.getShopName().isBlank()) {
+                shopNames.put(profile.getUser().getId(), profile.getShopName().trim());
+            }
+        }
+        return shopNames;
     }
 
     private static List<String> resolveDemoSubtitles(MarketplaceProduct product) {

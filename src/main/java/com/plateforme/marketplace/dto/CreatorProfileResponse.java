@@ -27,6 +27,7 @@ public record CreatorProfileResponse(
         long portfolioCount,
         long contentCount,
         long productCount,
+        long serviceCount,
         Double averageRating,
         String studioHeaderLayout,
         String studioHeaderContentStyle,
@@ -60,5 +61,9 @@ public record CreatorProfileResponse(
         String responseTimeLabel,
         Integer responseTimeSampleCount,
         List<ContentPostResponse> portfolioPosts,
-        Map<String, Object> portfolioSettings
+        Map<String, Object> portfolioSettings,
+        String shopName,
+        String shopSellingFocus,
+        String shopDescription,
+        String shopCoverUrl
 ) {}

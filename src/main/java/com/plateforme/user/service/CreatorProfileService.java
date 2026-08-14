@@ -65,6 +65,22 @@ public class CreatorProfileService {
             String headline = dto.studioContentHeadline().trim();
             profile.setStudioContentHeadline(headline.isEmpty() ? null : headline);
         }
+        if (dto.shopName() != null) {
+            String shopName = dto.shopName().trim();
+            profile.setShopName(shopName.isEmpty() ? null : shopName);
+        }
+        if (dto.shopSellingFocus() != null) {
+            String focus = dto.shopSellingFocus().trim();
+            profile.setShopSellingFocus(focus.isEmpty() ? null : focus);
+        }
+        if (dto.shopDescription() != null) {
+            String description = dto.shopDescription().trim();
+            profile.setShopDescription(description.isEmpty() ? null : description);
+        }
+        if (dto.shopCoverUrl() != null) {
+            String coverUrl = dto.shopCoverUrl().trim();
+            profile.setShopCoverUrl(coverUrl.isEmpty() ? null : coverUrl);
+        }
 
         if (dto.whyMeBlocks() != null) {
             profile.setWhyMeBlocks(new ArrayList<>(
@@ -83,6 +99,9 @@ public class CreatorProfileService {
 
         if (dto.gender() != null) {
             profile.setGender(ProfileExtensionsSupport.normalizeGender(dto.gender()));
+        }
+        if (dto.appRole() != null) {
+            profile.setAppRole(ProfileExtensionsSupport.normalizeAppRole(dto.appRole()));
         }
         if (dto.spokenLanguages() != null || dto.languages() != null) {
             List<String> merged = ProfileLinksLegacySync.mergeSpokenLanguages(
@@ -304,6 +323,10 @@ public class CreatorProfileService {
                 p.getStudioHeaderContentStyle() != null ? p.getStudioHeaderContentStyle() : "DEFAULT",
                 p.getStudioTabNavAlign() != null ? p.getStudioTabNavAlign() : "LEFT",
                 p.getStudioContentHeadline(),
+                p.getShopName(),
+                p.getShopSellingFocus(),
+                p.getShopDescription(),
+                p.getShopCoverUrl(),
                 ProfileStoryFieldsSupport.stripWhyMeMedia(safeBlocks(p.getWhyMeBlocks())),
                 safeBlocks(p.getExperienceBlocks()),
                 p.getYearsOfExperience(),
@@ -311,6 +334,7 @@ public class CreatorProfileService {
                 creatorReviewService.getReputation(user.getId(), 5),
                 p.getProfileVisits() != null ? p.getProfileVisits().longValue() : 0L,
                 p.getGender(),
+                ProfileExtensionsSupport.normalizeAppRole(p.getAppRole()),
                 spoken,
                 safeServices(p.getProfileServices()),
                 safeFaq(p.getFaqItems()),
