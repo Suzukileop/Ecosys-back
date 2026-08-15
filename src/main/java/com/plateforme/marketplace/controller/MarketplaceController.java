@@ -72,13 +72,20 @@ public class MarketplaceController {
             @RequestParam(required = false) String specialite,
             @RequestParam(required = false) Boolean verified,
             @RequestParam(required = false) Boolean available,
+            @RequestParam(required = false) String nationality,
+            @RequestParam(required = false) Integer minYearsExperience,
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size);
         UUID viewerUserId = resolveViewerUserId(authentication);
         return ResponseEntity.ok(PagedResponse.fromPage(
-                marketplaceService.getCreators(specialite, verified, available, viewerUserId, pageable)));
+                marketplaceService.getCreators(
+                        specialite, verified, available, nationality, minYearsExperience,
+                        lat, lng, sort, viewerUserId, pageable)));
     }
 
     @Operation(summary = "Rechercher des créateurs",
@@ -90,13 +97,31 @@ public class MarketplaceController {
     public ResponseEntity<PagedResponse<CreatorProfileResponse>> searchCreators(
             @RequestParam(required = false) String q,
             @RequestParam(required = false) Boolean available,
+            @RequestParam(required = false) String nationality,
+            @RequestParam(required = false) String specialite,
+            @RequestParam(required = false) Integer minYearsExperience,
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size);
         UUID viewerUserId = resolveViewerUserId(authentication);
         return ResponseEntity.ok(PagedResponse.fromPage(
-                marketplaceService.searchCreators(q, available, viewerUserId, pageable)));
+                marketplaceService.searchCreators(
+                        q, available, nationality, specialite, minYearsExperience,
+                        lat, lng, sort, viewerUserId, pageable)));
+    }
+
+    @Operation(summary = "Autocomplete specialties already used on profiles")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Matching specialty labels")
+    })
+    @GetMapping("/creators/specialties")
+    public ResponseEntity<List<String>> suggestSpecialties(
+            @RequestParam(required = false) String q) {
+        return ResponseEntity.ok(marketplaceService.suggestSpecialties(q));
     }
 
     @Operation(summary = "Profil public créateur",

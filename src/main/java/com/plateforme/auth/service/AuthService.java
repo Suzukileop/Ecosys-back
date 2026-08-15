@@ -4,6 +4,7 @@ import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.security.JwtUtils;
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.UserDto;
 import com.plateforme.user.entity.CreatorProfile;
@@ -43,6 +44,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final RedisTemplate<String, String> redisTemplate;
     private final EntityManager entityManager;
+    private final PublicMediaUrlResolver publicMediaUrlResolver;
 
     @Value("${app.jwt.refresh-expiration}")
     private long refreshExpirationMs;
@@ -183,7 +185,7 @@ public class AuthService {
                 user.getId(),
                 user.getEmail(),
                 user.getFullName(),
-                user.getAvatarUrl(),
+                publicMediaUrlResolver.resolveAvatarUrl(user.getAvatarUrl()),
                 roleNames,
                 user.getCreatedAt(),
                 user.getEmailVerified()

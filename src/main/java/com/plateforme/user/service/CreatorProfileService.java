@@ -53,7 +53,22 @@ public class CreatorProfileService {
         CreatorProfile profile = getOrCreateProfile(user);
 
         if (dto.bio() != null) profile.setBio(dto.bio());
-        if (dto.specialite() != null) profile.setSpecialite(dto.specialite());
+        if (dto.specialties() != null || dto.specialite() != null) {
+            List<String> source = dto.specialties() != null ? dto.specialties() : profile.getSpecialties();
+            List<String> normalized = SpecialtyTaxonomy.normalizeSpecialties(source, dto.specialite());
+            profile.setSpecialties(new ArrayList<>(normalized));
+            profile.setSpecialite(SpecialtyTaxonomy.primaryOf(normalized));
+            if (dto.strengthsToolsMastered() == null) {
+                profile.setStrengthsToolsMastered(new ArrayList<>(
+                        ProfileStoryFieldsSupport.normalizeStrengths(
+                                profile.getStrengthsToolsMastered(),
+                                userId,
+                                normalized)));
+            }
+        }
+        if (dto.specialtyTags() != null) {
+            profile.setSpecialtyTags(new ArrayList<>(SpecialtyTaxonomy.normalizeTags(dto.specialtyTags())));
+        }
         applyContactFields(profile, dto);
         if (dto.availabilityHours() != null) profile.setAvailabilityHours(dto.availabilityHours());
         if (dto.isAvailable() != null) profile.setIsAvailable(dto.isAvailable());
@@ -94,11 +109,17 @@ public class CreatorProfileService {
         }
         if (dto.strengthsToolsMastered() != null) {
             profile.setStrengthsToolsMastered(new ArrayList<>(
-                    ProfileStoryFieldsSupport.normalizeStrengths(dto.strengthsToolsMastered(), userId)));
+                    ProfileStoryFieldsSupport.normalizeStrengths(
+                            dto.strengthsToolsMastered(),
+                            userId,
+                            profile.getSpecialties())));
         }
 
         if (dto.gender() != null) {
             profile.setGender(ProfileExtensionsSupport.normalizeGender(dto.gender()));
+        }
+        if (dto.nationality() != null) {
+            profile.setNationality(ProfileExtensionsSupport.normalizeNationality(dto.nationality()));
         }
         if (dto.appRole() != null) {
             profile.setAppRole(ProfileExtensionsSupport.normalizeAppRole(dto.appRole()));
@@ -108,10 +129,6 @@ public class CreatorProfileService {
                     dto.spokenLanguages(), dto.languages());
             profile.setSpokenLanguages(new ArrayList<>(
                     ProfileExtensionsSupport.normalizeSpokenLanguages(merged)));
-        }
-        if (dto.profileServices() != null) {
-            profile.setProfileServices(new ArrayList<>(
-                    ProfileExtensionsSupport.normalizeServices(dto.profileServices())));
         }
         if (dto.faqItems() != null) {
             profile.setFaqItems(new ArrayList<>(
@@ -127,8 +144,18 @@ public class CreatorProfileService {
         }
 
         applyProfileLinks(profile, dto);
-
         applyLocation(profile, dto);
+
+        if (dto.profileServices() != null) {
+            if (CreatorProfileReadinessSupport.introducesNewServices(
+                    profile.getProfileServices(), dto.profileServices())) {
+                CreatorProfileReadinessSupport.requireReady(user, profile, true);
+            }
+            List<String> allowedSpecialties = SpecialtyTaxonomy.normalizeSpecialties(
+                    profile.getSpecialties(), profile.getSpecialite());
+            profile.setProfileServices(new ArrayList<>(
+                    ProfileExtensionsSupport.normalizeServices(dto.profileServices(), allowedSpecialties)));
+        }
 
         if (dto.typicalResponseTime() != null) {
             profile.setTypicalResponseTime(
@@ -293,6 +320,8 @@ public class CreatorProfileService {
                 user.getAvatarUrl(),
                 p.getBio(),
                 p.getSpecialite(),
+                p.getSpecialties() != null ? p.getSpecialties() : List.of(),
+                p.getSpecialtyTags() != null ? p.getSpecialtyTags() : List.of(),
                 p.getWebsiteUrl(),
                 p.getSocialLinks(),
                 p.getIsVerified(),
@@ -334,6 +363,7 @@ public class CreatorProfileService {
                 creatorReviewService.getReputation(user.getId(), 5),
                 p.getProfileVisits() != null ? p.getProfileVisits().longValue() : 0L,
                 p.getGender(),
+                p.getNationality(),
                 ProfileExtensionsSupport.normalizeAppRole(p.getAppRole()),
                 spoken,
                 safeServices(p.getProfileServices()),

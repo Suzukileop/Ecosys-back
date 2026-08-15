@@ -16,6 +16,12 @@ public record UpdateCreatorProfileDto(
         @Size(max = 150)
         String specialite,
 
+        @Size(max = 3)
+        List<String> specialties,
+
+        @Size(max = 8)
+        List<String> specialtyTags,
+
         @Size(max = 500)
         String websiteUrl,
 
@@ -109,7 +115,11 @@ public record UpdateCreatorProfileDto(
         @Size(max = 50)
         String gender,
 
-        @Pattern(regexp = "GENERAL_MEMBER|SERVICE_PROVIDER|FREELANCER_STUDENT|JOB_SEEKER|RH_RECRUITER")
+        @Pattern(regexp = "^$|[A-Za-z]{2}")
+        @Size(max = 2)
+        String nationality,
+
+        @Pattern(regexp = "GENERAL_MEMBER|SERVICE_PROVIDER|FREELANCER_STUDENT|JOB_SEEKER|SELLER|RH_RECRUITER")
         String appRole,
 
         List<String> spokenLanguages,

@@ -7,6 +7,7 @@ import com.plateforme.marketplace.dto.SocialLink;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.marketplace.util.SocialLinksJsonParser;
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.ContactVisibilityLevel;
 import com.plateforme.user.dto.ContactVisibilitySettings;
@@ -27,6 +28,7 @@ import com.plateforme.user.service.PortfolioSettingsSupport;
 import com.plateforme.user.service.CreatorResponseTimeService;
 import com.plateforme.user.service.CreatorReviewService;
 import com.plateforme.user.service.ProfileExtensionsSupport;
+import com.plateforme.user.service.SpecialtyTaxonomy;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,7 +37,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -78,13 +84,23 @@ public class MarketplaceService {
     private final CreatorReviewService creatorReviewService;
     private final CreatorFollowService creatorFollowService;
     private final CreatorFollowRepository creatorFollowRepository;
+    private final PublicMediaUrlResolver publicMediaUrlResolver;
 
     @Transactional(readOnly = true)
     public Page<CreatorProfileResponse> getCreators(String specialite, Boolean verified, Boolean available,
+                                                    String nationality, Integer minYearsExperience,
+                                                    Double lat, Double lng, String sort,
                                                     UUID viewerUserId, Pageable pageable) {
-        String specialiteFilter = specialite != null && !specialite.isBlank() ? specialite.trim() : null;
+        String specialiteFilter = trimSpecialtyFilter(specialite);
+        String nationalityFilter = ProfileExtensionsSupport.normalizeNationality(nationality);
+        Integer yearsFilter = normalizeMinYearsExperience(minYearsExperience);
+        boolean byDistance = wantsDistanceSort(sort, lat, lng);
 
-        Page<CreatorProfile> page = creatorProfileRepository.findForMarketplace(specialiteFilter, verified, available, pageable);
+        Page<CreatorProfile> page = byDistance
+                ? creatorProfileRepository.findForMarketplaceByDistance(
+                        specialiteFilter, verified, available, nationalityFilter, yearsFilter, lat, lng, pageable)
+                : creatorProfileRepository.findForMarketplace(
+                        specialiteFilter, verified, available, nationalityFilter, yearsFilter, pageable);
         List<UUID> creatorIds = page.getContent().stream().map(p -> p.getUser().getId()).toList();
         Set<UUID> followedIds = creatorFollowService.getFollowedCreatorIds(viewerUserId, creatorIds);
         Map<UUID, Long> followerCounts = creatorFollowService.getFollowerCounts(creatorIds);
@@ -93,17 +109,32 @@ public class MarketplaceService {
                 profile,
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
-                followedIds.contains(profile.getUser().getId())));
+                followedIds.contains(profile.getUser().getId()),
+                byDistance ? distanceKm(lat, lng, profile) : null));
     }
 
     @Transactional(readOnly = true)
-    public Page<CreatorProfileResponse> searchCreators(String keyword, Boolean available, UUID viewerUserId,
-                                                       Pageable pageable) {
+    public Page<CreatorProfileResponse> searchCreators(String keyword, Boolean available, String nationality,
+                                                       String specialite, Integer minYearsExperience,
+                                                       Double lat, Double lng, String sort,
+                                                       UUID viewerUserId, Pageable pageable) {
+        String nationalityFilter = ProfileExtensionsSupport.normalizeNationality(nationality);
+        String specialiteFilter = trimSpecialtyFilter(specialite);
+        Integer yearsFilter = normalizeMinYearsExperience(minYearsExperience);
+        boolean byDistance = wantsDistanceSort(sort, lat, lng);
         Page<CreatorProfile> page;
         if (keyword == null || keyword.isBlank()) {
-            page = creatorProfileRepository.findForMarketplace(null, null, available, pageable);
+            page = byDistance
+                    ? creatorProfileRepository.findForMarketplaceByDistance(
+                            specialiteFilter, null, available, nationalityFilter, yearsFilter, lat, lng, pageable)
+                    : creatorProfileRepository.findForMarketplace(
+                            specialiteFilter, null, available, nationalityFilter, yearsFilter, pageable);
+        } else if (byDistance) {
+            page = creatorProfileRepository.searchByBioOrSpecialiteByDistance(
+                    keyword.trim(), available, nationalityFilter, specialiteFilter, yearsFilter, lat, lng, pageable);
         } else {
-            page = creatorProfileRepository.searchByBioOrSpecialite(keyword.trim(), available, pageable);
+            page = creatorProfileRepository.searchByBioOrSpecialite(
+                    keyword.trim(), available, nationalityFilter, specialiteFilter, yearsFilter, pageable);
         }
 
         List<UUID> creatorIds = page.getContent().stream().map(p -> p.getUser().getId()).toList();
@@ -114,7 +145,44 @@ public class MarketplaceService {
                 profile,
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
-                followedIds.contains(profile.getUser().getId())));
+                followedIds.contains(profile.getUser().getId()),
+                byDistance ? distanceKm(lat, lng, profile) : null));
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> suggestSpecialties(String q) {
+        String query = q == null ? "" : q.trim();
+        if (query.length() > SpecialtyTaxonomy.MAX_SPECIALTY_LENGTH) {
+            query = query.substring(0, SpecialtyTaxonomy.MAX_SPECIALTY_LENGTH);
+        }
+        LinkedHashMap<String, String> unique = new LinkedHashMap<>();
+        if (!query.isBlank()) {
+            String likeQuery = escapeLike(query);
+            for (String label : creatorProfileRepository.suggestSpecialties(likeQuery)) {
+                String sanitized = SpecialtyTaxonomy.sanitizeLabel(label);
+                if (sanitized != null) {
+                    unique.putIfAbsent(sanitized.toLowerCase(Locale.ROOT), sanitized);
+                }
+            }
+            String needle = query.toLowerCase(Locale.ROOT);
+            String compactNeedle = needle.replaceAll("[^a-z0-9]+", "");
+            for (String label : SpecialtyTaxonomy.LABELS) {
+                String lower = label.toLowerCase(Locale.ROOT);
+                String compact = lower.replaceAll("[^a-z0-9]+", "");
+                if (lower.contains(needle) || (!compactNeedle.isEmpty() && compact.contains(compactNeedle))) {
+                    unique.putIfAbsent(lower, label);
+                }
+            }
+        }
+        List<String> values = new ArrayList<>(unique.values());
+        String rankQuery = query.toLowerCase(Locale.ROOT);
+        values.sort(Comparator
+                .comparingInt((String label) -> specialtySuggestionRank(label, rankQuery))
+                .thenComparing(label -> label.toLowerCase(Locale.ROOT)));
+        if (values.size() > 20) {
+            return List.copyOf(values.subList(0, 20));
+        }
+        return List.copyOf(values);
     }
 
     @Transactional(readOnly = true)
@@ -147,7 +215,8 @@ public class MarketplaceService {
                 averageRating,
                 followerCount,
                 isFollowing,
-                portfolioPosts);
+                portfolioPosts,
+                null);
     }
 
     @Transactional(readOnly = true)
@@ -163,7 +232,8 @@ public class MarketplaceService {
             CreatorProfile profile,
             boolean authenticated,
             long followerCount,
-            boolean isFollowing) {
+            boolean isFollowing,
+            Double distanceKm) {
         User user = profile.getUser();
         UUID userId = user.getId();
         long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
@@ -183,7 +253,8 @@ public class MarketplaceService {
                 averageRating,
                 followerCount,
                 isFollowing,
-                List.of());
+                List.of(),
+                distanceKm);
     }
 
     private CreatorProfileResponse buildResponse(
@@ -196,17 +267,20 @@ public class MarketplaceService {
             Double averageRating,
             long followerCount,
             boolean isFollowing,
-            List<ContentPostResponse> portfolioPosts) {
-        long serviceCount = profile.getProfileServices() != null
-                ? profile.getProfileServices().size()
-                : 0L;
+            List<ContentPostResponse> portfolioPosts,
+            Double distanceKm) {
+        long serviceCount = ProfileExtensionsSupport.countActiveServices(profile.getProfileServices());
         return new CreatorProfileResponse(
                 user.getId(),
                 user.getFullName(),
-                user.getAvatarUrl(),
+                publicMediaUrlResolver.resolveAvatarUrl(user.getAvatarUrl()),
                 contact.phone(),
                 profile.getBio(),
-                profile.getSpecialite(),
+                SpecialtyTaxonomy.primaryOf(profile.getSpecialties()) != null
+                        ? SpecialtyTaxonomy.primaryOf(profile.getSpecialties())
+                        : profile.getSpecialite(),
+                profile.getSpecialties() != null ? List.copyOf(profile.getSpecialties()) : List.of(),
+                profile.getSpecialtyTags() != null ? List.copyOf(profile.getSpecialtyTags()) : List.of(),
                 contact.websiteUrl(),
                 contact.socialLinks(),
                 Boolean.TRUE.equals(profile.getIsVerified()),
@@ -221,6 +295,7 @@ public class MarketplaceService {
                 profile.getStudioTabNavAlign() != null ? profile.getStudioTabNavAlign() : "LEFT",
                 profile.getLocationCity(),
                 profile.getLocationCountry(),
+                profile.getNationality(),
                 portfolioPosts.isEmpty() ? portfolioPosts : List.copyOf(portfolioPosts),
                 followerCount,
                 isFollowing,
@@ -252,8 +327,70 @@ public class MarketplaceService {
                 blankToNull(profile.getShopName()),
                 blankToNull(profile.getShopSellingFocus()),
                 blankToNull(profile.getShopDescription()),
-                blankToNull(profile.getShopCoverUrl())
+                blankToNull(profile.getShopCoverUrl()),
+                distanceKm
         );
+    }
+
+    private static String escapeLike(String value) {
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    private static String trimSpecialtyFilter(String specialite) {
+        if (specialite == null || specialite.isBlank()) {
+            return null;
+        }
+        return specialite.trim();
+    }
+
+    private static Integer normalizeMinYearsExperience(Integer minYearsExperience) {
+        if (minYearsExperience == null || minYearsExperience < 1) {
+            return null;
+        }
+        return Math.min(minYearsExperience, 80);
+    }
+
+    private static int specialtySuggestionRank(String label, String query) {
+        if (query == null || query.isBlank()) {
+            return 2;
+        }
+        String lower = label.toLowerCase(Locale.ROOT);
+        if (lower.equals(query)) {
+            return 0;
+        }
+        if (lower.startsWith(query)) {
+            return 1;
+        }
+        return 2;
+    }
+
+    private static boolean wantsDistanceSort(String sort, Double lat, Double lng) {
+        if (lat == null || lng == null) {
+            return false;
+        }
+        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+            return false;
+        }
+        return sort != null && sort.equalsIgnoreCase("distance");
+    }
+
+    private static Double distanceKm(Double viewerLat, Double viewerLng, CreatorProfile profile) {
+        if (viewerLat == null || viewerLng == null) {
+            return null;
+        }
+        Double lat = profile.getLocationLat();
+        Double lng = profile.getLocationLng();
+        if (lat == null || lng == null) {
+            return null;
+        }
+        double earthRadiusKm = 6371.0;
+        double dLat = Math.toRadians(lat - viewerLat);
+        double dLng = Math.toRadians(lng - viewerLng);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(viewerLat)) * Math.cos(Math.toRadians(lat))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return Math.round(earthRadiusKm * c * 10.0) / 10.0;
     }
 
     private static List<ProfileTeamMemberDto> safeTeamMembers(List<ProfileTeamMemberDto> teamMembers) {
@@ -295,8 +432,8 @@ public class MarketplaceService {
         Integer years = profile.getYearsOfExperience();
         List<ProfileStrengthToolDto> strengths = profile.getStrengthsToolsMastered() != null
                 ? profile.getStrengthsToolsMastered() : List.of();
-        List<ProfileServiceDto> services = profile.getProfileServices() != null
-                ? profile.getProfileServices() : List.of();
+        List<ProfileServiceDto> services = ProfileExtensionsSupport.activeServices(
+                profile.getProfileServices() != null ? profile.getProfileServices() : List.of());
         List<FaqItemDto> faq = profile.getFaqItems() != null ? profile.getFaqItems() : List.of();
         String gender = ProfileExtensionsSupport.normalizeGender(profile.getGender());
         String responseLabel = CreatorResponseTimeService.resolveResponseTimeLabel(

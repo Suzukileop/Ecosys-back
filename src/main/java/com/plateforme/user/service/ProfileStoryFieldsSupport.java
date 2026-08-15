@@ -439,6 +439,46 @@ public final class ProfileStoryFieldsSupport {
         return List.copyOf(normalized);
     }
 
+    static List<ProfileStrengthToolDto> normalizeStrengths(
+            List<ProfileStrengthToolDto> raw,
+            UUID userId,
+            List<String> allowedSpecialties) {
+        List<ProfileStrengthToolDto> normalized = normalizeStrengths(raw, userId);
+        if (allowedSpecialties == null || allowedSpecialties.isEmpty()) {
+            return normalized.stream()
+                    .map(item -> new ProfileStrengthToolDto(
+                            item.name(),
+                            item.description(),
+                            null,
+                            item.level(),
+                            item.useCases(),
+                            item.experienceYears(),
+                            item.experienceLabel(),
+                            item.currentlyUsed(),
+                            item.iconUrl()))
+                    .toList();
+        }
+        String fallback = allowedSpecialties.get(0);
+        List<ProfileStrengthToolDto> remapped = new ArrayList<>();
+        for (ProfileStrengthToolDto item : normalized) {
+            String category = SpecialtyTaxonomy.matchAllowed(item.category(), allowedSpecialties);
+            if (category == null) {
+                category = fallback;
+            }
+            remapped.add(new ProfileStrengthToolDto(
+                    item.name(),
+                    item.description(),
+                    category,
+                    item.level(),
+                    item.useCases(),
+                    item.experienceYears(),
+                    item.experienceLabel(),
+                    item.currentlyUsed(),
+                    item.iconUrl()));
+        }
+        return List.copyOf(remapped);
+    }
+
     private static List<String> normalizeStrengthUseCases(List<String> raw) {
         if (raw == null || raw.isEmpty()) {
             return List.of();

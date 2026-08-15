@@ -20,6 +20,8 @@ public record CreatorProfileResponse(
         String phone,
         String bio,
         String specialite,
+        List<String> specialties,
+        List<String> specialtyTags,
         String websiteUrl,
         List<SocialLink> socialLinks,
         boolean isVerified,
@@ -34,6 +36,7 @@ public record CreatorProfileResponse(
         String studioTabNavAlign,
         String locationCity,
         String locationCountry,
+        String nationality,
         List<ContentPostResponse> recentPosts,
         long followerCount,
         boolean isFollowing,
@@ -65,5 +68,7 @@ public record CreatorProfileResponse(
         String shopName,
         String shopSellingFocus,
         String shopDescription,
-        String shopCoverUrl
+        String shopCoverUrl,
+        /** Distance from viewer when sort=distance (km); null otherwise. */
+        Double distanceKm
 ) {}

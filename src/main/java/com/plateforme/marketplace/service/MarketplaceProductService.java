@@ -11,6 +11,7 @@ import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.CreatorProfileReadinessService;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
 import com.plateforme.marketplace.service.ProductWhyBlocksSupport;
 import lombok.RequiredArgsConstructor;
@@ -40,10 +41,12 @@ public class MarketplaceProductService {
     private final MarketplaceProductRepository productRepository;
     private final UserRepository userRepository;
     private final CreatorProfileRepository creatorProfileRepository;
+    private final CreatorProfileReadinessService creatorProfileReadinessService;
 
     @Transactional
     public MarketplaceProductResponse createProduct(UUID creatorId, MarketplaceProductRequest req) {
         User creator = requireCreator(creatorId);
+        creatorProfileReadinessService.requireReadyForProducts(creatorId);
         MarketplaceProduct product = new MarketplaceProduct();
         product.setCreator(creator);
         applyRequest(product, req);
@@ -200,6 +203,9 @@ public class MarketplaceProductService {
     @Transactional
     public MarketplaceProductResponse setPublished(UUID creatorId, UUID productId, boolean published) {
         MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        if (published) {
+            creatorProfileReadinessService.requireReadyForProducts(creatorId);
+        }
         product.setIsPublished(published);
         product = productRepository.save(product);
         log.info("Marketplace product id={} published={} by creator={}", productId, published, creatorId);

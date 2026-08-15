@@ -47,6 +47,16 @@ public class CreatorProfile {
     @Column(length = 150)
     private String specialite;
 
+    /** Closed taxonomy labels (max 3). First item is the primary specialty. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "specialties", columnDefinition = "jsonb", nullable = false)
+    private List<String> specialties = new ArrayList<>();
+
+    /** Free keyword tags for text search only (not filter chips). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "specialty_tags", columnDefinition = "jsonb", nullable = false)
+    private List<String> specialtyTags = new ArrayList<>();
+
     @Column(name = "website_url", length = 500)
     private String websiteUrl;
 
@@ -78,7 +88,11 @@ public class CreatorProfile {
     @Column(length = 50)
     private String gender;
 
-    /** App experience role: GENERAL_MEMBER (default), SERVICE_PROVIDER, FREELANCER_STUDENT, JOB_SEEKER, RH_RECRUITER. */
+    /** ISO 3166-1 alpha-2 citizenship code (not GPS residence). */
+    @Column(name = "nationality", length = 2)
+    private String nationality;
+
+    /** App experience role: GENERAL_MEMBER (default), SERVICE_PROVIDER, FREELANCER_STUDENT, SELLER, RH_RECRUITER. */
     @Column(name = "app_role", nullable = false, length = 40)
     private String appRole = "GENERAL_MEMBER";
 

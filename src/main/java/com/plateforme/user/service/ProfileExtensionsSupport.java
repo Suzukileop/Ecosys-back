@@ -33,6 +33,9 @@ public final class ProfileExtensionsSupport {
     static final int MAX_SERVICE_DEADLINE = 100;
     static final int MAX_SERVICE_TASKS = 12;
     static final int MAX_SERVICE_TASK = 120;
+    static final int MAX_SERVICE_TAGS = 8;
+    static final int MAX_SERVICE_TAG_LENGTH = 40;
+    static final int MAX_SERVICE_COVER_URL = 500;
     static final int MAX_LANGUAGE_LENGTH = 50;
     static final int MAX_LINK_LABEL = 100;
     static final int MAX_LINK_URL = 500;
@@ -89,12 +92,17 @@ public final class ProfileExtensionsSupport {
             "GENERAL_MEMBER",
             "SERVICE_PROVIDER",
             "FREELANCER_STUDENT",
-            "JOB_SEEKER",
+            "SELLER",
             "RH_RECRUITER"
+    );
+
+    private static final Set<String> LEGACY_SERVICE_PROVIDER_ROLES = Set.of(
+            "JOB_SEEKER"
     );
 
     /**
      * Platform experience role (Information → My Role). Always returns a valid enum value.
+     * Job Seeker is merged into SERVICE_PROVIDER.
      */
     public static String normalizeAppRole(String raw) {
         if (raw == null) {
@@ -105,21 +113,29 @@ public final class ProfileExtensionsSupport {
             return DEFAULT_APP_ROLE;
         }
         String token = trimmed.toUpperCase(Locale.ROOT).replaceAll("[\\s-]+", "_");
+        if (LEGACY_SERVICE_PROVIDER_ROLES.contains(token)) {
+            return "SERVICE_PROVIDER";
+        }
+        if ("STUDENT".equals(token) || "FREELANCER".equals(token)) {
+            return "FREELANCER_STUDENT";
+        }
         if (APP_ROLES.contains(token)) {
             return token;
         }
         String key = Normalizer.normalize(trimmed.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}+", "");
-        if (key.contains("service") || key.contains("provider")) {
+        if (key.contains("seller") || key.contains("catalog")) {
+            return "SELLER";
+        }
+        if (key.contains("service") || key.contains("provider")
+                || key.contains("job") || key.contains("seeker")) {
             return "SERVICE_PROVIDER";
         }
         if (key.contains("freelancer") || key.contains("student")) {
             return "FREELANCER_STUDENT";
         }
-        if (key.contains("job") || key.contains("seeker")) {
-            return "JOB_SEEKER";
-        }
-        if (key.contains("recruiter") || key.equals("rh") || key.startsWith("rh ")) {
+        if (key.contains("recruiter") || key.contains("client")
+                || key.equals("rh") || key.startsWith("rh ")) {
             return "RH_RECRUITER";
         }
         if (key.contains("general") || key.contains("member")) {
@@ -145,6 +161,21 @@ public final class ProfileExtensionsSupport {
             return "Female";
         }
         return null;
+    }
+
+    /** ISO 3166-1 alpha-2, uppercase. Empty clears. Invalid values are ignored as null. */
+    public static String normalizeNationality(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String trimmed = raw.trim().toUpperCase(Locale.ROOT);
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (!trimmed.matches("[A-Z]{2}")) {
+            return null;
+        }
+        return trimmed;
     }
 
     public static List<String> normalizeSpokenLanguages(List<String> raw) {
@@ -480,6 +511,12 @@ public final class ProfileExtensionsSupport {
     }
 
     public static List<ProfileServiceDto> normalizeServices(List<ProfileServiceDto> raw) {
+        return normalizeServices(raw, null);
+    }
+
+    public static List<ProfileServiceDto> normalizeServices(
+            List<ProfileServiceDto> raw,
+            List<String> allowedSpecialties) {
         if (raw == null || raw.isEmpty()) {
             return List.of();
         }
@@ -508,17 +545,200 @@ public final class ProfileExtensionsSupport {
                 throw new BusinessException("SERVICE_DEADLINE_TOO_LONG",
                         "Service deadlines must be at most " + MAX_SERVICE_DEADLINE + " characters.");
             }
+            String pricingType = normalizePricingType(item.pricingType(), item.basePriceCents());
             Integer basePriceCents = item.basePriceCents();
-            if (basePriceCents != null && basePriceCents < 0) {
+            if ("QUOTE".equals(pricingType)) {
+                basePriceCents = null;
+            } else if (basePriceCents == null) {
+                throw new BusinessException("SERVICE_PRICE_REQUIRED",
+                        "A price is required unless pricing is \"Sur devis\".");
+            } else if (basePriceCents < 0) {
                 throw new BusinessException("SERVICE_PRICE_INVALID", "Service base price cannot be negative.");
             }
             List<String> tasks = normalizeServiceTasks(item.tasks());
+            String specialty = resolveServiceSpecialty(item.specialty(), allowedSpecialties);
+            String coverImageUrl = blankToNull(item.coverImageUrl());
+            if (coverImageUrl != null && coverImageUrl.length() > MAX_SERVICE_COVER_URL) {
+                throw new BusinessException("SERVICE_COVER_TOO_LONG",
+                        "Cover image URL must be at most " + MAX_SERVICE_COVER_URL + " characters.");
+            }
+            String status = normalizeServiceStatus(item.status());
+            List<String> tags = normalizeServiceTags(item.tags());
+            String currency = normalizeServiceCurrency(item.currency());
+            Integer deliveryValue = item.deliveryValue();
+            String deliveryUnit = normalizeDeliveryUnit(item.deliveryUnit());
+            if (deliveryValue != null && deliveryValue < 1) {
+                throw new BusinessException("SERVICE_DELIVERY_INVALID",
+                        "Delivery time must be at least 1.");
+            }
+            if (deliveryValue != null && deliveryUnit == null) {
+                deliveryUnit = "DAYS";
+            }
+            if (deliveryValue == null) {
+                deliveryUnit = null;
+            }
+            // Keep a human deadline string for older clients; prefer structured fields when present.
+            String resolvedDeadline = deadline;
+            if (deliveryValue != null && deliveryUnit != null) {
+                String unitLabel = "WEEKS".equals(deliveryUnit) ? "weeks" : "days";
+                if (deliveryValue == 1) {
+                    unitLabel = "WEEKS".equals(deliveryUnit) ? "week" : "day";
+                }
+                resolvedDeadline = deliveryValue + " " + unitLabel;
+            } else if (deadline != null) {
+                int[] parsed = parseLegacyDeadline(deadline);
+                if (parsed != null) {
+                    deliveryValue = parsed[0];
+                    deliveryUnit = parsed[1] == 1 ? "WEEKS" : "DAYS";
+                }
+            }
             UUID id = item.id() != null ? item.id() : UUID.randomUUID();
             int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
-            normalized.add(new ProfileServiceDto(id, sortOrder, title, description, basePriceCents, deadline, tasks));
+            normalized.add(new ProfileServiceDto(
+                    id, sortOrder, title, description, basePriceCents, resolvedDeadline, tasks,
+                    specialty, pricingType, coverImageUrl, status, tags,
+                    currency, deliveryValue, deliveryUnit));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);
+    }
+
+    public static List<ProfileServiceDto> activeServices(List<ProfileServiceDto> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<ProfileServiceDto> active = new ArrayList<>();
+        for (ProfileServiceDto item : raw) {
+            if (item == null) {
+                continue;
+            }
+            String status = normalizeServiceStatus(item.status());
+            if ("ACTIVE".equals(status)) {
+                active.add(item);
+            }
+        }
+        return List.copyOf(active);
+    }
+
+    public static long countActiveServices(List<ProfileServiceDto> raw) {
+        return activeServices(raw).size();
+    }
+
+    static String normalizeServiceCurrency(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "MGA";
+        }
+        String code = raw.trim().toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", "");
+        if (code.isEmpty() || code.length() > 8) {
+            throw new BusinessException("SERVICE_CURRENCY_INVALID",
+                    "Currency code must be 1–8 alphanumeric characters.");
+        }
+        return code;
+    }
+
+    static String normalizeDeliveryUnit(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String key = raw.trim().toUpperCase(Locale.ROOT);
+        return switch (key) {
+            case "DAY", "DAYS", "JOUR", "JOURS" -> "DAYS";
+            case "WEEK", "WEEKS", "SEMAINE", "SEMAINES" -> "WEEKS";
+            default -> throw new BusinessException("SERVICE_DELIVERY_UNIT_INVALID",
+                    "Delivery unit must be days or weeks.");
+        };
+    }
+
+    /** Returns [value, unitFlag] where unitFlag 0=DAYS, 1=WEEKS; null if unparsable. */
+    static int[] parseLegacyDeadline(String deadline) {
+        if (deadline == null || deadline.isBlank()) {
+            return null;
+        }
+        String trimmed = deadline.trim().toLowerCase(Locale.ROOT);
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("^(\\d+)\\s*(day|days|jour|jours|week|weeks|semaine|semaines)?$")
+                .matcher(trimmed);
+        if (!m.matches()) {
+            return null;
+        }
+        int value = Integer.parseInt(m.group(1));
+        if (value < 1) {
+            return null;
+        }
+        String unit = m.group(2);
+        boolean weeks = unit != null && (unit.startsWith("week") || unit.startsWith("semaine"));
+        return new int[]{value, weeks ? 1 : 0};
+    }
+
+    static String normalizePricingType(String raw, Integer basePriceCents) {
+        if (raw == null || raw.isBlank()) {
+            return basePriceCents != null ? "FIXED" : "QUOTE";
+        }
+        String key = raw.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        return switch (key) {
+            case "FIXED", "FIXE", "FIXED_PRICE" -> "FIXED";
+            case "FROM", "A_PARTIR_DE", "STARTING_AT", "STARTING" -> "FROM";
+            case "QUOTE", "SUR_DEVIS", "ON_REQUEST", "DEVIS" -> "QUOTE";
+            default -> throw new BusinessException("SERVICE_PRICING_INVALID",
+                    "Pricing type must be fixe, à partir de, or sur devis.");
+        };
+    }
+
+    static String normalizeServiceStatus(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "ACTIVE";
+        }
+        String key = raw.trim().toUpperCase(Locale.ROOT).replace('-', '_').replace(' ', '_');
+        return switch (key) {
+            case "ACTIVE", "ACTIF" -> "ACTIVE";
+            case "PAUSED", "EN_PAUSE", "PAUSE" -> "PAUSED";
+            case "ARCHIVED", "ARCHIVE", "ARCHIVÉ" -> "ARCHIVED";
+            default -> throw new BusinessException("SERVICE_STATUS_INVALID",
+                    "Service status must be actif, en pause, or archivé.");
+        };
+    }
+
+    static String resolveServiceSpecialty(String raw, List<String> allowedSpecialties) {
+        if (allowedSpecialties == null) {
+            String trimmed = blankToNull(raw);
+            return trimmed;
+        }
+        if (allowedSpecialties.isEmpty()) {
+            throw new BusinessException("SERVICE_SPECIALTY_REQUIRED",
+                    "Add at least one specialty to your profile before creating a service.");
+        }
+        String matched = SpecialtyTaxonomy.matchAllowed(raw, allowedSpecialties);
+        if (matched == null) {
+            throw new BusinessException("SERVICE_SPECIALTY_INVALID",
+                    "Each service must use one of your profile specialties.");
+        }
+        return matched;
+    }
+
+    static List<String> normalizeServiceTags(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        List<String> tags = new ArrayList<>();
+        for (String item : raw) {
+            String value = blankToNull(item);
+            if (value == null) {
+                continue;
+            }
+            if (value.length() > MAX_SERVICE_TAG_LENGTH) {
+                value = value.substring(0, MAX_SERVICE_TAG_LENGTH).trim();
+            }
+            String key = value.toLowerCase(Locale.ROOT);
+            if (!seen.add(key)) {
+                continue;
+            }
+            tags.add(value);
+            if (tags.size() >= MAX_SERVICE_TAGS) {
+                break;
+            }
+        }
+        return List.copyOf(tags);
     }
 
     static List<String> normalizeServiceTasks(List<String> raw) {

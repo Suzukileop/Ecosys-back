@@ -8,7 +8,9 @@ import com.plateforme.marketplace.entity.ProductType;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
+import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.CreatorProfileReadinessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,6 +36,12 @@ class MarketplaceProductServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock
+    private CreatorProfileRepository creatorProfileRepository;
+
+    @Mock
+    private CreatorProfileReadinessService creatorProfileReadinessService;
+
     @InjectMocks
     private MarketplaceProductService productService;
 
@@ -46,6 +54,7 @@ class MarketplaceProductServiceTest {
         creator = new User();
         creator.setId(creatorId);
         creator.setFullName("Creator");
+        creator.setAvatarUrl("https://cdn.example/a.jpg");
     }
 
     @Test
@@ -59,6 +68,22 @@ class MarketplaceProductServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("code")
                 .isEqualTo("INVALID_PREVIEW_LIMIT");
+
+        verify(productRepository, never()).save(any());
+        verify(creatorProfileReadinessService).requireReadyForProducts(creatorId);
+    }
+
+    @Test
+    @DisplayName("createProduct : profil incomplet → PROFILE_INCOMPLETE")
+    void createProduct_profileIncomplete() {
+        when(userRepository.findByIdAndDeletedAtIsNull(creatorId)).thenReturn(Optional.of(creator));
+        doThrow(new BusinessException("PROFILE_INCOMPLETE", "Complete your profile before continuing. Missing: photo."))
+                .when(creatorProfileReadinessService).requireReadyForProducts(creatorId);
+
+        assertThatThrownBy(() -> productService.createProduct(creatorId, sampleRequest(5)))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("PROFILE_INCOMPLETE");
 
         verify(productRepository, never()).save(any());
     }
@@ -114,6 +139,29 @@ class MarketplaceProductServiceTest {
         assertThat(product.getIsPublished()).isTrue();
         assertThat(result.isPublished()).isTrue();
         verify(productRepository).save(product);
+        verify(creatorProfileReadinessService).requireReadyForProducts(creatorId);
+    }
+
+    @Test
+    @DisplayName("setPublished : profil incomplet bloque la publication")
+    void setPublished_profileIncomplete() {
+        UUID productId = UUID.randomUUID();
+        MarketplaceProduct product = new MarketplaceProduct();
+        product.setId(productId);
+        product.setCreator(creator);
+        product.setIsPublished(false);
+
+        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        doThrow(new BusinessException("PROFILE_INCOMPLETE", "Complete your profile before continuing."))
+                .when(creatorProfileReadinessService).requireReadyForProducts(creatorId);
+
+        assertThatThrownBy(() -> productService.setPublished(creatorId, productId, true))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("PROFILE_INCOMPLETE");
+
+        assertThat(product.getIsPublished()).isFalse();
+        verify(productRepository, never()).save(any());
     }
 
     @Test
