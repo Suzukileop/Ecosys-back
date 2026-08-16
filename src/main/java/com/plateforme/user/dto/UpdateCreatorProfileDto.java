@@ -76,6 +76,9 @@ public record UpdateCreatorProfileDto(
 
         Boolean isAvailable,
 
+        @Size(max = 80)
+        String availabilityLabel,
+
         String contactVisibility,
 
         @Pattern(regexp = "BANNER|SPLIT|VIP_GOLD|VIP_AURORA|STAGE")

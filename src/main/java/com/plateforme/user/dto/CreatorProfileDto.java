@@ -33,6 +33,7 @@ public record CreatorProfileDto(
         List<ProfileContactEntryDto> contactEmails,
         String availabilityHours,
         Boolean isAvailable,
+        String availabilityLabel,
         String contactVisibility,
         String studioHeaderLayout,
         String studioHeaderContentStyle,

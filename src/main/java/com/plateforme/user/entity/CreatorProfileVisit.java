@@ -34,10 +34,17 @@ public class CreatorProfileVisit {
     @Column(name = "viewed_at", nullable = false)
     private LocalDateTime viewedAt;
 
+    /** How many times this visitor opened the profile (unique row still one per visitor_key). */
+    @Column(name = "visit_count", nullable = false)
+    private Integer visitCount = 1;
+
     @PrePersist
     protected void onCreate() {
         if (viewedAt == null) {
             viewedAt = LocalDateTime.now();
+        }
+        if (visitCount == null || visitCount < 1) {
+            visitCount = 1;
         }
     }
 }

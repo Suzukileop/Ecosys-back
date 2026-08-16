@@ -13,4 +13,6 @@ public interface CreatorProfileVisitRepository extends JpaRepository<CreatorProf
     Optional<CreatorProfileVisit> findByCreatorUserIdAndVisitorKey(UUID creatorUserId, String visitorKey);
 
     Page<CreatorProfileVisit> findByCreatorUserIdOrderByViewedAtDesc(UUID creatorUserId, Pageable pageable);
+
+    long countByCreatorUserId(UUID creatorUserId);
 }

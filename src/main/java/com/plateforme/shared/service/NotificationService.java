@@ -1,22 +1,31 @@
 package com.plateforme.shared.service;
 
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.dto.NotificationDto;
 import com.plateforme.shared.entity.Notification;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.mail.MailDeliveryService;
 import com.plateforme.shared.repository.NotificationRepository;
+import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.User;
+import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +34,8 @@ public class NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
+    private final CreatorProfileRepository creatorProfileRepository;
+    private final PublicMediaUrlResolver publicMediaUrlResolver;
     private final MailDeliveryService mailDeliveryService;
 
     @Transactional
@@ -101,23 +112,15 @@ public class NotificationService {
 
     @Transactional
     public void sendBulkToRole(String roleName, String type, String title, String message, UUID refId) {
-        List<User> users = userRepository.findAllByDeletedAtIsNull(Pageable.unpaged()).getContent()
-                .stream()
-                .filter(u -> u.getRoles().stream().anyMatch(r -> r.getName().equals(roleName)))
-                .toList();
-
-        log.info("Envoi notification bulk role={} refId={} : {} destinataires", roleName, refId, users.size());
-
-        for (User user : users) {
-            Notification notification = buildNotification(user, type, title, message, refId, null,
+        List<User> users = userRepository.findByRoleNameAndDeletedAtIsNull(roleName);
+        for (User u : users) {
+            Notification notification = buildNotification(u, type, title, message, refId, null,
                     Notification.Channel.PLATFORM);
             notificationRepository.save(notification);
         }
+        log.debug("Bulk notification type={} role={} recipients={}", type, roleName, users.size());
     }
 
-    /**
-     * Notifie l'agent assigné s'il existe, sinon tous les agents du rôle.
-     */
     @Transactional
     public void notifyAgentOrAll(UUID assignedAgentId, String type, String title, String message, UUID refId) {
         if (assignedAgentId != null) {
@@ -129,9 +132,13 @@ public class NotificationService {
 
     @Transactional(readOnly = true)
     public Page<NotificationDto> getMyNotifications(UUID userId, Pageable pageable) {
-        return notificationRepository
-                .findByUserIdOrderByIsReadAscCreatedAtDesc(userId, pageable)
-                .map(this::toDto);
+        Page<Notification> page = notificationRepository
+                .findByUserIdOrderByIsReadAscCreatedAtDesc(userId, pageable);
+        ActorLookup actors = loadActors(page.getContent());
+        List<NotificationDto> content = page.getContent().stream()
+                .map(n -> toDto(n, actors))
+                .toList();
+        return new PageImpl<>(content, pageable, page.getTotalElements());
     }
 
     @Transactional
@@ -168,7 +175,40 @@ public class NotificationService {
         return notificationRepository.countByUserIdAndIsReadFalse(userId);
     }
 
-    private NotificationDto toDto(Notification n) {
+    private ActorLookup loadActors(List<Notification> notifications) {
+        List<UUID> actorIds = notifications.stream()
+                .map(Notification::getRefSecondaryId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (actorIds.isEmpty()) {
+            return ActorLookup.empty();
+        }
+        Map<UUID, User> usersById = userRepository.findByIdInAndDeletedAtIsNull(actorIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        Set<UUID> creatorIds = creatorProfileRepository.findByUser_IdIn(actorIds).stream()
+                .map(cp -> cp.getUser() != null ? cp.getUser().getId() : null)
+                .filter(Objects::nonNull)
+                .filter(usersById::containsKey)
+                .collect(Collectors.toCollection(HashSet::new));
+        return new ActorLookup(usersById, creatorIds);
+    }
+
+    private NotificationDto toDto(Notification n, ActorLookup actors) {
+        UUID actorId = n.getRefSecondaryId();
+        User actor = actorId != null ? actors.usersById().get(actorId) : null;
+        String actorName = null;
+        String actorAvatar = null;
+        Boolean profileAvailable = null;
+        if (actorId != null) {
+            profileAvailable = actors.creatorUserIds().contains(actorId);
+            if (actor != null) {
+                if (actor.getFullName() != null && !actor.getFullName().isBlank()) {
+                    actorName = actor.getFullName().trim();
+                }
+                actorAvatar = publicMediaUrlResolver.resolveAvatarUrl(actor.getAvatarUrl());
+            }
+        }
         return new NotificationDto(
                 n.getId(),
                 n.getType(),
@@ -178,7 +218,16 @@ public class NotificationService {
                 n.getChannel().name(),
                 n.getRefId(),
                 n.getRefSecondaryId(),
-                n.getCreatedAt()
+                n.getCreatedAt(),
+                actorName,
+                actorAvatar,
+                profileAvailable
         );
+    }
+
+    private record ActorLookup(Map<UUID, User> usersById, Set<UUID> creatorUserIds) {
+        static ActorLookup empty() {
+            return new ActorLookup(Map.of(), Set.of());
+        }
     }
 }

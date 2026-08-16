@@ -28,21 +28,35 @@ public class CreatorReviewService {
     private final CreatorReviewRepository creatorReviewRepository;
     private final CreatorProfileRepository creatorProfileRepository;
     private final UserRepository userRepository;
+    private final CreatorResponseTimeService creatorResponseTimeService;
 
     @Transactional(readOnly = true)
     public CreatorReputationDto getReputation(UUID creatorUserId, int recentLimit) {
         CreatorProfile profile = creatorProfileRepository.findByUserId(creatorUserId).orElse(null);
         boolean verified = profile != null && Boolean.TRUE.equals(profile.getIsVerified());
 
+        CreatorResponseTimeService.DiscussResponseMetrics discuss =
+                creatorResponseTimeService.computeDiscussResponseMetrics(creatorUserId);
+
         long reviewCount = creatorReviewRepository.countByCreator_Id(creatorUserId);
         if (reviewCount == 0) {
-            return new CreatorReputationDto(null, 0, 0, buildTrustBadges(verified, null, 0, 0), List.of(),
+            return new CreatorReputationDto(
+                    null,
+                    0,
+                    0,
+                    0,
+                    discuss.responseRatePercent(),
+                    discuss.inboundConversationCount(),
+                    discuss.typicallyRepliesWithinLabel(),
+                    buildTrustBadges(verified, null, 0, 0),
+                    List.of(),
                     getRatingDistribution(creatorUserId));
         }
 
         Double avg = creatorReviewRepository.averageRating(creatorUserId);
         long recommendCount = creatorReviewRepository.countByCreator_IdAndWouldRecommendTrue(creatorUserId);
         int recommendPercent = (int) Math.round((recommendCount * 100.0) / reviewCount);
+        long completedMissionsCount = reviewCount;
 
         List<CreatorReviewItemDto> recent = recentLimit > 0
                 ? creatorReviewRepository
@@ -56,6 +70,10 @@ public class CreatorReviewService {
                 avg != null ? Math.round(avg * 10.0) / 10.0 : null,
                 reviewCount,
                 recommendPercent,
+                completedMissionsCount,
+                discuss.responseRatePercent(),
+                discuss.inboundConversationCount(),
+                discuss.typicallyRepliesWithinLabel(),
                 buildTrustBadges(verified, avg, reviewCount, recommendPercent),
                 recent,
                 getRatingDistribution(creatorUserId)

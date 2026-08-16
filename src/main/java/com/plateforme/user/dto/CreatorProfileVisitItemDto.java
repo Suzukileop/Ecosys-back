@@ -9,5 +9,7 @@ public record CreatorProfileVisitItemDto(
         boolean anonymous,
         UUID viewerUserId,
         String viewerFullName,
-        String viewerAvatarUrl
+        String viewerAvatarUrl,
+        String viewerAppRole,
+        int visitCount
 ) {}

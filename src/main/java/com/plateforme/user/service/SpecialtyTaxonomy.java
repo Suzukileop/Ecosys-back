@@ -32,7 +32,8 @@ public final class SpecialtyTaxonomy {
             "Illustration",
             "3D",
             "Photography",
-            "Data science"
+            "Data science",
+            "DevOps"
     );
 
     private static final Map<String, String> ALIASES = buildAliases();
@@ -73,7 +74,7 @@ public final class SpecialtyTaxonomy {
         LinkedHashMap<String, String> unique = new LinkedHashMap<>();
         if (raw != null) {
             for (String item : raw) {
-                String label = sanitizeLabel(item);
+                String label = resolveLabel(item);
                 if (label == null) {
                     continue;
                 }
@@ -83,7 +84,7 @@ public final class SpecialtyTaxonomy {
                 }
             }
         }
-        String primary = sanitizeLabel(primaryHint);
+        String primary = resolveLabel(primaryHint);
         if (primary != null) {
             String primaryKey = primary.toLowerCase(Locale.ROOT);
             if (unique.containsKey(primaryKey)) {
@@ -106,6 +107,16 @@ public final class SpecialtyTaxonomy {
         return List.copyOf(list);
     }
 
+    /** Sanitize free text, then map known aliases (e.g. DEVOOPS → DevOps). */
+    private static String resolveLabel(String raw) {
+        String sanitized = sanitizeLabel(raw);
+        if (sanitized == null) {
+            return null;
+        }
+        String canonical = canonicalize(sanitized);
+        return canonical != null ? canonical : sanitized;
+    }
+
     public static String primaryOf(List<String> specialties) {
         if (specialties == null || specialties.isEmpty()) {
             return null;
@@ -121,8 +132,19 @@ public final class SpecialtyTaxonomy {
         if (wanted.isEmpty()) {
             return null;
         }
+        String wantedKey = key(wanted);
+        String wantedCanonical = canonicalize(wanted);
+        String wantedResolvedKey = wantedCanonical != null ? key(wantedCanonical) : wantedKey;
         for (String item : allowed) {
-            if (item != null && item.equalsIgnoreCase(wanted)) {
+            if (item == null || item.isBlank()) {
+                continue;
+            }
+            String itemKey = key(item);
+            if (itemKey.equals(wantedKey) || itemKey.equals(wantedResolvedKey)) {
+                return item;
+            }
+            String itemCanonical = canonicalize(item);
+            if (itemCanonical != null && key(itemCanonical).equals(wantedResolvedKey)) {
                 return item;
             }
         }
@@ -172,6 +194,49 @@ public final class SpecialtyTaxonomy {
         return List.copyOf(tags);
     }
 
+    /**
+     * Expand a user query / Popular chip into searchable terms (raw + canonical alias).
+     * Example: "dev" → ["dev", "Developer"].
+     */
+    public static List<String> resolveSearchTerms(String raw) {
+        String sanitized = sanitizeLabel(raw);
+        if (sanitized == null) {
+            return List.of();
+        }
+        LinkedHashSet<String> terms = new LinkedHashSet<>();
+        terms.add(sanitized);
+        String canonical = canonicalize(sanitized);
+        if (canonical != null) {
+            terms.add(canonical);
+        }
+        return List.copyOf(terms);
+    }
+
+    /** Preferred exact-match term: canonical label when known, otherwise sanitized raw. */
+    public static String primarySearchTerm(String raw) {
+        List<String> terms = resolveSearchTerms(raw);
+        if (terms.isEmpty()) {
+            return null;
+        }
+        String canonical = canonicalize(terms.get(0));
+        return canonical != null ? canonical : terms.get(0);
+    }
+
+    /** Secondary term when distinct from {@link #primarySearchTerm(String)}; otherwise empty. */
+    public static String alternateSearchTerm(String raw) {
+        List<String> terms = resolveSearchTerms(raw);
+        if (terms.size() < 2) {
+            return "";
+        }
+        String primary = primarySearchTerm(raw);
+        for (String term : terms) {
+            if (primary == null || !term.equalsIgnoreCase(primary)) {
+                return term;
+            }
+        }
+        return "";
+    }
+
     private static String key(String value) {
         String normalized = Normalizer.normalize(value.trim().toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}+", "")
@@ -199,6 +264,7 @@ public final class SpecialtyTaxonomy {
         put(map, "Illustration", "illustrator");
         put(map, "Photography", "photographer", "photo");
         put(map, "Data science", "data scientist", "datascience", "data scien");
+        put(map, "DevOps", "devops", "dev ops", "devoops", "devops engineer", "dev ops engineer");
         return Map.copyOf(map);
     }
 

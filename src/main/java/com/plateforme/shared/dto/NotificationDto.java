@@ -12,5 +12,22 @@ public record NotificationDto(
         String channel,
         UUID refId,
         UUID refSecondaryId,
-        LocalDateTime createdAt
-) {}
+        LocalDateTime createdAt,
+        String actorFullName,
+        String actorAvatarUrl,
+        Boolean actorProfileAvailable
+) {
+    public NotificationDto(
+            UUID id,
+            String type,
+            String title,
+            String message,
+            Boolean isRead,
+            String channel,
+            UUID refId,
+            UUID refSecondaryId,
+            LocalDateTime createdAt
+    ) {
+        this(id, type, title, message, isRead, channel, refId, refSecondaryId, createdAt, null, null, null);
+    }
+}

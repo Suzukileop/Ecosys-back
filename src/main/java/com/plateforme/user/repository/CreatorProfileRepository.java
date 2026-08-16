@@ -28,6 +28,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
 
     Page<CreatorProfile> findBySpecialiteContainingIgnoreCaseAndUser_DeletedAtIsNull(String specialite, Pageable pageable);
 
+    /**
+     * Keyword search with weighted relevance (specialties/tags first).
+     * :qCanonical / :specialiteAlt may be '' when unused.
+     */
     @Query(value = """
             SELECT cp.* FROM creator_profiles cp
             INNER JOIN users u ON u.id = cp.user_id
@@ -50,7 +54,25 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR (
+                    CAST(:qCanonical AS VARCHAR) <> ''
+                    AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
+            AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
             AND (CAST(:nationality AS VARCHAR) IS NULL OR CAST(:nationality AS VARCHAR) = ''
                  OR UPPER(cp.nationality) = UPPER(CAST(:nationality AS VARCHAR)))
@@ -60,7 +82,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -69,9 +92,107 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
-            ORDER BY u.full_name ASC
+            ORDER BY
+              GREATEST(
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                  ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                  THEN 100
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                  ) THEN 80
+                  WHEN (
+                    jsonb_array_length(COALESCE(cp.specialties, '[]'::jsonb)) > 0
+                    AND LOWER(cp.specialties->>0) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  ) OR (
+                    jsonb_array_length(COALESCE(cp.specialties, '[]'::jsonb)) = 0
+                    AND LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  ) THEN 55
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                    WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  ) THEN 40
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  ) THEN 35
+                  WHEN LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  THEN 25
+                  WHEN LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%')) THEN 10
+                  ELSE 0
+                END,
+                CASE
+                  WHEN CAST(:qCanonical AS VARCHAR) = '' THEN 0
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:qCanonical AS VARCHAR)))
+                  ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:qCanonical AS VARCHAR)))
+                  THEN 100
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:qCanonical AS VARCHAR)))
+                  ) THEN 80
+                  WHEN (
+                    jsonb_array_length(COALESCE(cp.specialties, '[]'::jsonb)) > 0
+                    AND LOWER(cp.specialties->>0) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                  ) OR (
+                    jsonb_array_length(COALESCE(cp.specialties, '[]'::jsonb)) = 0
+                    AND LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                  ) THEN 55
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                    WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                  ) THEN 40
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                  ) THEN 35
+                  WHEN LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                  THEN 25
+                  WHEN LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%')) THEN 10
+                  ELSE 0
+                END
+              ) DESC,
+              COALESCE(cp.is_verified, false) DESC,
+              COALESCE(cp.is_available, true) DESC,
+              u.full_name ASC
             """,
             countQuery = """
             SELECT COUNT(*) FROM creator_profiles cp
@@ -95,7 +216,25 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR (
+                    CAST(:qCanonical AS VARCHAR) <> ''
+                    AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
+            AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
             AND (CAST(:nationality AS VARCHAR) IS NULL OR CAST(:nationality AS VARCHAR) = ''
                  OR UPPER(cp.nationality) = UPPER(CAST(:nationality AS VARCHAR)))
@@ -105,7 +244,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -114,15 +254,48 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             """,
             nativeQuery = true)
     Page<CreatorProfile> searchByBioOrSpecialite(
             @Param("q") String q,
+            @Param("qCanonical") String qCanonical,
+            @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
             @Param("specialite") String specialite,
+            @Param("specialiteAlt") String specialiteAlt,
             @Param("minYearsExperience") Integer minYearsExperience,
             Pageable pageable);
 
@@ -139,7 +312,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -148,7 +322,37 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
@@ -156,7 +360,51 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  OR UPPER(cp.nationality) = UPPER(CAST(:nationality AS VARCHAR)))
             AND (CAST(:minYearsExperience AS INTEGER) IS NULL
                  OR cp.years_of_experience >= CAST(:minYearsExperience AS INTEGER))
-            ORDER BY u.full_name ASC
+            ORDER BY
+              CASE
+                WHEN CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = '' THEN 0
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                  WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                THEN 100
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                  WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                ) THEN 80
+                WHEN (
+                  jsonb_array_length(COALESCE(cp.specialties, '[]'::jsonb)) > 0
+                  AND LOWER(cp.specialties->>0) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                ) OR (
+                  jsonb_array_length(COALESCE(cp.specialties, '[]'::jsonb)) = 0
+                  AND LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                ) THEN 55
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                  WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                ) THEN 40
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                  WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                ) THEN 35
+                ELSE 0
+              END DESC,
+              CASE
+                WHEN CAST(:specialiteAlt AS VARCHAR) = '' THEN 0
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                  WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                THEN 100
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                  WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                ) THEN 80
+                ELSE 0
+              END DESC,
+              COALESCE(cp.is_verified, false) DESC,
+              COALESCE(cp.is_available, true) DESC,
+              u.full_name ASC
             """,
             countQuery = """
             SELECT COUNT(*) FROM creator_profiles cp
@@ -171,7 +419,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -180,7 +429,37 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
@@ -192,6 +471,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             nativeQuery = true)
     Page<CreatorProfile> findForMarketplace(
             @Param("specialite") String specialite,
+            @Param("specialiteAlt") String specialiteAlt,
             @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
@@ -211,7 +491,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -220,7 +501,37 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
@@ -237,6 +548,20 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                   + sin(radians(CAST(:lat AS DOUBLE PRECISION)))
                   * sin(radians(cp.location_lat))
               )))) ASC NULLS LAST,
+              CASE
+                WHEN CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = '' THEN 0
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                  WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                THEN 100
+                WHEN EXISTS (
+                  SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                  WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                ) THEN 80
+                ELSE 0
+              END DESC,
+              COALESCE(cp.is_verified, false) DESC,
               u.full_name ASC
             """,
             countQuery = """
@@ -252,7 +577,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -261,7 +587,37 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
@@ -273,6 +629,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             nativeQuery = true)
     Page<CreatorProfile> findForMarketplaceByDistance(
             @Param("specialite") String specialite,
+            @Param("specialiteAlt") String specialiteAlt,
             @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
@@ -303,7 +660,25 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR (
+                    CAST(:qCanonical AS VARCHAR) <> ''
+                    AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
+            AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
             AND (CAST(:nationality AS VARCHAR) IS NULL OR CAST(:nationality AS VARCHAR) = ''
                  OR UPPER(cp.nationality) = UPPER(CAST(:nationality AS VARCHAR)))
@@ -313,7 +688,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -322,7 +698,37 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             ORDER BY
               CASE WHEN cp.location_lat IS NULL OR cp.location_lng IS NULL THEN 1 ELSE 0 END ASC,
@@ -333,6 +739,34 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                   + sin(radians(CAST(:lat AS DOUBLE PRECISION)))
                   * sin(radians(cp.location_lat))
               )))) ASC NULLS LAST,
+              GREATEST(
+                CASE
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                  ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                  THEN 100
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                  ) THEN 80
+                  ELSE 0
+                END,
+                CASE
+                  WHEN CAST(:qCanonical AS VARCHAR) = '' THEN 0
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:qCanonical AS VARCHAR)))
+                  ) OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:qCanonical AS VARCHAR)))
+                  THEN 100
+                  WHEN EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:qCanonical AS VARCHAR)))
+                  ) THEN 80
+                  ELSE 0
+                END
+              ) DESC,
+              COALESCE(cp.is_verified, false) DESC,
               u.full_name ASC
             """,
             countQuery = """
@@ -357,7 +791,25 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR (
+                    CAST(:qCanonical AS VARCHAR) <> ''
+                    AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(spec) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
+            AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
             AND (CAST(:nationality AS VARCHAR) IS NULL OR CAST(:nationality AS VARCHAR) = ''
                  OR UPPER(cp.nationality) = UPPER(CAST(:nationality AS VARCHAR)))
@@ -367,7 +819,8 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = ''
                  OR EXISTS (
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
-                    WHERE POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
+                    WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR POSITION(LOWER(TRIM(CAST(:specialite AS VARCHAR))) IN LOWER(spec)) > 0
                        OR (
                             length(regexp_replace(LOWER(TRIM(CAST(:specialite AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
                             AND POSITION(
@@ -376,15 +829,48 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             ) > 0
                        )
                  )
+                 OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
                  OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 OR EXISTS (
+                    SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                    WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialite AS VARCHAR)))
+                       OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialite AS VARCHAR), '%'))
+                 )
+                 OR (
+                    CAST(:specialiteAlt AS VARCHAR) <> ''
+                    AND (
+                         EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialties, '[]'::jsonb)) spec
+                            WHERE LOWER(TRIM(spec)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR POSITION(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))) IN LOWER(spec)) > 0
+                               OR (
+                                    length(regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')) > 0
+                                    AND POSITION(
+                                        regexp_replace(LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR))), '[^a-z0-9]+', '', 'g')
+                                        IN regexp_replace(LOWER(spec), '[^a-z0-9]+', '', 'g')
+                                    ) > 0
+                               )
+                         )
+                         OR LOWER(TRIM(COALESCE(cp.specialite, ''))) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         OR EXISTS (
+                            SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
+                            WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:specialiteAlt AS VARCHAR)))
+                               OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
+                         )
+                    )
+                 )
             )
             """,
             nativeQuery = true)
     Page<CreatorProfile> searchByBioOrSpecialiteByDistance(
             @Param("q") String q,
+            @Param("qCanonical") String qCanonical,
+            @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
             @Param("specialite") String specialite,
+            @Param("specialiteAlt") String specialiteAlt,
             @Param("minYearsExperience") Integer minYearsExperience,
             @Param("lat") double lat,
             @Param("lng") double lng,

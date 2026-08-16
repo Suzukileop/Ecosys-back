@@ -1,11 +1,13 @@
 package com.plateforme.shared.service;
 
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.dto.NotificationDto;
 import com.plateforme.shared.entity.Notification;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.mail.MailDeliveryService;
 import com.plateforme.shared.repository.NotificationRepository;
 import com.plateforme.user.entity.User;
+import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +37,12 @@ class NotificationServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private CreatorProfileRepository creatorProfileRepository;
+
+    @Mock
+    private PublicMediaUrlResolver publicMediaUrlResolver;
 
     @Mock
     private MailDeliveryService mailDeliveryService;

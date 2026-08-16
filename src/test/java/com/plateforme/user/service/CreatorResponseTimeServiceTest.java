@@ -127,4 +127,45 @@ class CreatorResponseTimeServiceTest {
                 .isEqualTo("Usually within 1 hour");
         assertThat(CreatorResponseTimeService.resolveResponseTimeLabel(null, 900, 0)).isNull();
     }
+
+    @Test
+    @DisplayName("formatTypicallyRepliesWithin uses min / h / days buckets")
+    void formatTypicallyRepliesWithin_buckets() {
+        assertThat(CreatorResponseTimeService.formatTypicallyRepliesWithin(90))
+                .isEqualTo("Typically replies within 2 min");
+        assertThat(CreatorResponseTimeService.formatTypicallyRepliesWithin(7200))
+                .isEqualTo("Typically replies within 2 h");
+        assertThat(CreatorResponseTimeService.formatTypicallyRepliesWithin(86_400))
+                .isEqualTo("Typically replies within 1 day");
+        assertThat(CreatorResponseTimeService.formatTypicallyRepliesWithin(172_800))
+                .isEqualTo("Typically replies within 2 days");
+        assertThat(CreatorResponseTimeService.formatTypicallyRepliesWithin(null)).isNull();
+    }
+
+    @Test
+    @DisplayName("computeDiscussResponseMetrics maps aggregate row to rate and label")
+    void computeDiscussResponseMetrics_fromAggregate() {
+        when(directMessageRepository.aggregateDiscussResponseStats(creatorId))
+                .thenReturn(List.<Object[]>of(new Object[]{10L, 9L, 5400.0}));
+
+        var metrics = creatorResponseTimeService.computeDiscussResponseMetrics(creatorId);
+
+        assertThat(metrics.inboundConversationCount()).isEqualTo(10);
+        assertThat(metrics.repliedConversationCount()).isEqualTo(9);
+        assertThat(metrics.responseRatePercent()).isEqualTo(90);
+        assertThat(metrics.typicallyRepliesWithinLabel()).isEqualTo("Typically replies within 2 h");
+    }
+
+    @Test
+    @DisplayName("computeDiscussResponseMetrics returns empty when no inbound Discuss DMs")
+    void computeDiscussResponseMetrics_empty() {
+        when(directMessageRepository.aggregateDiscussResponseStats(creatorId))
+                .thenReturn(List.<Object[]>of(new Object[]{0L, 0L, null}));
+
+        var metrics = creatorResponseTimeService.computeDiscussResponseMetrics(creatorId);
+
+        assertThat(metrics.inboundConversationCount()).isZero();
+        assertThat(metrics.responseRatePercent()).isNull();
+        assertThat(metrics.typicallyRepliesWithinLabel()).isNull();
+    }
 }

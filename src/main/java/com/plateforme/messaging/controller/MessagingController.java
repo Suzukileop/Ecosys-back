@@ -175,6 +175,15 @@ public class MessagingController {
         return ResponseEntity.ok(messagingService.sendMessage(conversationId, getCurrentUserId(), body.content()));
     }
 
+    @DeleteMapping("/conversations/{id}/messages/{messageId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> deleteMessage(
+            @PathVariable("id") UUID conversationId,
+            @PathVariable("messageId") UUID messageId) {
+        messagingService.deleteMessage(conversationId, getCurrentUserId(), messageId);
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping(value = "/conversations/{id}/messages", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<DirectMessageDto> sendFileMessage(

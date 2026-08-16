@@ -165,6 +165,10 @@ public class CreatorProfile {
     @Column(name = "is_available", nullable = false)
     private Boolean isAvailable = true;
 
+    /** Custom label when available (null/blank → "Available"). */
+    @Column(name = "availability_label", length = 80)
+    private String availabilityLabel;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "contact_visibility", columnDefinition = "jsonb", nullable = false)
     private String contactVisibility = ContactVisibilitySettings.defaultJson();

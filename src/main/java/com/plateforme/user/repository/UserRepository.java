@@ -29,6 +29,12 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     List<User> findByIdInAndDeletedAtIsNull(Collection<UUID> ids);
 
     @Query("""
+            SELECT DISTINCT u FROM User u JOIN u.roles r
+            WHERE u.deletedAt IS NULL AND r.name = :roleName
+            """)
+    List<User> findByRoleNameAndDeletedAtIsNull(@Param("roleName") String roleName);
+
+    @Query("""
             SELECT u FROM User u
             WHERE u.deletedAt IS NULL
               AND u.id <> :excludeId

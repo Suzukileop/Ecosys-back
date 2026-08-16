@@ -16,6 +16,7 @@ import com.plateforme.user.dto.UpdateCreatorProfileDto;
 import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
+import com.plateforme.user.repository.CreatorProfileVisitRepository;
 import com.plateforme.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,6 +35,7 @@ import java.util.UUID;
 public class CreatorProfileService {
 
     private final CreatorProfileRepository creatorProfileRepository;
+    private final CreatorProfileVisitRepository creatorProfileVisitRepository;
     private final UserRepository userRepository;
     private final CreatorPortfolioService creatorPortfolioService;
     private final CreatorReviewService creatorReviewService;
@@ -52,7 +54,7 @@ public class CreatorProfileService {
         User user = requireCreatorUser(userId);
         CreatorProfile profile = getOrCreateProfile(user);
 
-        if (dto.bio() != null) profile.setBio(dto.bio());
+        if (dto.bio() != null) profile.setBio(ProfileBioSupport.normalize(dto.bio()));
         if (dto.specialties() != null || dto.specialite() != null) {
             List<String> source = dto.specialties() != null ? dto.specialties() : profile.getSpecialties();
             List<String> normalized = SpecialtyTaxonomy.normalizeSpecialties(source, dto.specialite());
@@ -72,6 +74,10 @@ public class CreatorProfileService {
         applyContactFields(profile, dto);
         if (dto.availabilityHours() != null) profile.setAvailabilityHours(dto.availabilityHours());
         if (dto.isAvailable() != null) profile.setIsAvailable(dto.isAvailable());
+        if (dto.availabilityLabel() != null) {
+            String label = dto.availabilityLabel().trim();
+            profile.setAvailabilityLabel(label.isEmpty() ? null : label);
+        }
         if (dto.contactVisibility() != null) profile.setContactVisibility(dto.contactVisibility());
         if (dto.studioHeaderLayout() != null) profile.setStudioHeaderLayout(dto.studioHeaderLayout());
         if (dto.studioHeaderContentStyle() != null) profile.setStudioHeaderContentStyle(dto.studioHeaderContentStyle());
@@ -313,14 +319,18 @@ public class CreatorProfileService {
                 p.getAvgResponseTimeSeconds(),
                 p.getResponseTimeSampleCount());
 
+        List<String> specialties = SpecialtyTaxonomy.normalizeSpecialties(
+                p.getSpecialties(), p.getSpecialite());
         return new CreatorProfileDto(
                 p.getId(),
                 user.getId(),
                 user.getFullName(),
                 user.getAvatarUrl(),
-                p.getBio(),
-                p.getSpecialite(),
-                p.getSpecialties() != null ? p.getSpecialties() : List.of(),
+                ProfileBioSupport.normalize(p.getBio()),
+                SpecialtyTaxonomy.primaryOf(specialties) != null
+                        ? SpecialtyTaxonomy.primaryOf(specialties)
+                        : p.getSpecialite(),
+                specialties,
                 p.getSpecialtyTags() != null ? p.getSpecialtyTags() : List.of(),
                 p.getWebsiteUrl(),
                 p.getSocialLinks(),
@@ -345,6 +355,7 @@ public class CreatorProfileService {
                         p.getContactEmails(), p.getContactEmail()),
                 p.getAvailabilityHours(),
                 Boolean.TRUE.equals(p.getIsAvailable()),
+                p.getAvailabilityLabel(),
                 p.getContactVisibility() != null
                         ? p.getContactVisibility()
                         : ContactVisibilitySettings.defaults().toJson(objectMapper),
@@ -361,7 +372,7 @@ public class CreatorProfileService {
                 p.getYearsOfExperience(),
                 safeStrengths(p.getStrengthsToolsMastered()),
                 creatorReviewService.getReputation(user.getId(), 5),
-                p.getProfileVisits() != null ? p.getProfileVisits().longValue() : 0L,
+                creatorProfileVisitRepository.countByCreatorUserId(user.getId()),
                 p.getGender(),
                 p.getNationality(),
                 ProfileExtensionsSupport.normalizeAppRole(p.getAppRole()),

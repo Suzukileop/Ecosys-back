@@ -268,6 +268,29 @@ public class MessagingService {
     }
 
     @Transactional
+    public void deleteMessage(UUID conversationId, UUID userId, UUID messageId) {
+        assertParticipant(conversationId, userId);
+        DirectMessage message = directMessageRepository.findById(messageId)
+                .orElseThrow(() -> new BusinessException("MESSAGE_NOT_FOUND", "Message not found."));
+        if (!message.getConversation().getId().equals(conversationId)) {
+            throw new BusinessException("MESSAGE_NOT_FOUND", "Message not found.");
+        }
+        if (message.getMessageType() == MessageType.SYSTEM) {
+            throw new BusinessException("FORBIDDEN", "System messages cannot be deleted.");
+        }
+        if (!message.getSender().getId().equals(userId)) {
+            throw new BusinessException("FORBIDDEN", "You can only delete your own messages.");
+        }
+        directMessageRepository.delete(message);
+        Conversation conversation = message.getConversation();
+        conversation.setUpdatedAt(LocalDateTime.now());
+        conversationRepository.save(conversation);
+        messagingTemplate.convertAndSend(
+                "/topic/conversations/" + conversationId + "/deleted",
+                Map.of("messageId", messageId.toString(), "conversationId", conversationId.toString()));
+    }
+
+    @Transactional
     public DirectMessageDto sendFileMessage(UUID conversationId, UUID senderId, String caption, MultipartFile file)
             throws IOException {
         assertParticipant(conversationId, senderId);

@@ -96,6 +96,7 @@ public class MarketplaceController {
     @GetMapping("/creators/search")
     public ResponseEntity<PagedResponse<CreatorProfileResponse>> searchCreators(
             @RequestParam(required = false) String q,
+            @RequestParam(required = false) Boolean verified,
             @RequestParam(required = false) Boolean available,
             @RequestParam(required = false) String nationality,
             @RequestParam(required = false) String specialite,
@@ -110,7 +111,7 @@ public class MarketplaceController {
         UUID viewerUserId = resolveViewerUserId(authentication);
         return ResponseEntity.ok(PagedResponse.fromPage(
                 marketplaceService.searchCreators(
-                        q, available, nationality, specialite, minYearsExperience,
+                        q, verified, available, nationality, specialite, minYearsExperience,
                         lat, lng, sort, viewerUserId, pageable)));
     }
 
@@ -300,9 +301,9 @@ public class MarketplaceController {
         return ResponseEntity.ok(creatorFollowService.getStats(id, resolveViewerUserId(authentication)));
     }
 
-    @Operation(summary = "Follow a creator")
+    @Operation(summary = "Follow a creator", security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/creators/{id}/follow")
-    public ResponseEntity<Void> followCreator(
+    public ResponseEntity<CreatorFollowStatsDto> followCreator(
             @PathVariable UUID id,
             Authentication authentication) {
         if (!isAuthenticatedUser(authentication)) {
@@ -310,12 +311,12 @@ public class MarketplaceController {
         }
         UUID followerId = ((User) authentication.getPrincipal()).getId();
         creatorFollowService.follow(followerId, id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(creatorFollowService.getStats(id, followerId));
     }
 
-    @Operation(summary = "Unfollow a creator")
+    @Operation(summary = "Unfollow a creator", security = @SecurityRequirement(name = "bearerAuth"))
     @DeleteMapping("/creators/{id}/follow")
-    public ResponseEntity<Void> unfollowCreator(
+    public ResponseEntity<CreatorFollowStatsDto> unfollowCreator(
             @PathVariable UUID id,
             Authentication authentication) {
         if (!isAuthenticatedUser(authentication)) {
@@ -323,7 +324,7 @@ public class MarketplaceController {
         }
         UUID followerId = ((User) authentication.getPrincipal()).getId();
         creatorFollowService.unfollow(followerId, id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(creatorFollowService.getStats(id, followerId));
     }
 
     @Operation(summary = "List creators I follow")
