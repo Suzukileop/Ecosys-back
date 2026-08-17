@@ -30,7 +30,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
 
     /**
      * Keyword search with weighted relevance (specialties/tags first).
-     * :qCanonical / :specialiteAlt may be '' when unused.
+     * :qCanonical / :qExpanded / :specialiteAlt / :specialiteSignals may be '' when unused.
      */
     @Query(value = """
             SELECT cp.* FROM creator_profiles cp
@@ -54,6 +54,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  OR (
                     CAST(:qCanonical AS VARCHAR) <> ''
                     AND (
@@ -69,7 +73,30 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                             WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                          )
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                     )
+                 )
+                 OR (
+                   CAST(:qExpanded AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:qExpanded AS VARCHAR), '|')) AS x(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
@@ -123,6 +150,23 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                          )
                     )
                  )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
+                 )
             )
             ORDER BY
               GREATEST(
@@ -151,6 +195,11 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                   ) THEN 35
+                  WHEN LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  THEN 30
                   WHEN LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                     OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                   THEN 25
@@ -183,6 +232,11 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                   ) THEN 35
+                  WHEN LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                    OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                  THEN 30
                   WHEN LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                     OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                   THEN 25
@@ -216,6 +270,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  OR (
                     CAST(:qCanonical AS VARCHAR) <> ''
                     AND (
@@ -231,7 +289,30 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                             WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                          )
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                     )
+                 )
+                 OR (
+                   CAST(:qExpanded AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:qExpanded AS VARCHAR), '|')) AS x(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
@@ -285,17 +366,36 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                          )
                     )
                  )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
+                 )
             )
             """,
             nativeQuery = true)
     Page<CreatorProfile> searchByBioOrSpecialite(
             @Param("q") String q,
             @Param("qCanonical") String qCanonical,
+            @Param("qExpanded") String qExpanded,
             @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
             @Param("specialite") String specialite,
             @Param("specialiteAlt") String specialiteAlt,
+            @Param("specialiteSignals") String specialiteSignals,
             @Param("minYearsExperience") Integer minYearsExperience,
             Pageable pageable);
 
@@ -352,6 +452,23 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                                OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
                          )
                     )
+                 )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
@@ -402,6 +519,24 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                 ) THEN 80
                 ELSE 0
               END DESC,
+              CASE
+                WHEN CAST(:specialiteSignals AS VARCHAR) = '' THEN 0
+                WHEN EXISTS (
+                  SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                  WHERE length(btrim(term)) >= 2
+                    AND (
+                      LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                      OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                    )
+                ) THEN 20
+                ELSE 0
+              END DESC,
               COALESCE(cp.is_verified, false) DESC,
               COALESCE(cp.is_available, true) DESC,
               u.full_name ASC
@@ -460,6 +595,23 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                          )
                     )
                  )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
+                 )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
@@ -472,6 +624,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     Page<CreatorProfile> findForMarketplace(
             @Param("specialite") String specialite,
             @Param("specialiteAlt") String specialiteAlt,
+            @Param("specialiteSignals") String specialiteSignals,
             @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
@@ -531,6 +684,23 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                                OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
                          )
                     )
+                 )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
@@ -618,6 +788,23 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                          )
                     )
                  )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
+                 )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
             AND (CAST(:available AS BOOLEAN) IS NULL OR COALESCE(cp.is_available, true) = CAST(:available AS BOOLEAN))
@@ -630,6 +817,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
     Page<CreatorProfile> findForMarketplaceByDistance(
             @Param("specialite") String specialite,
             @Param("specialiteAlt") String specialiteAlt,
+            @Param("specialiteSignals") String specialiteSignals,
             @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
@@ -660,6 +848,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  OR (
                     CAST(:qCanonical AS VARCHAR) <> ''
                     AND (
@@ -675,7 +867,30 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                             WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                          )
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                     )
+                 )
+                 OR (
+                   CAST(:qExpanded AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:qExpanded AS VARCHAR), '|')) AS x(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
@@ -728,6 +943,23 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                                OR LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:specialiteAlt AS VARCHAR), '%'))
                          )
                     )
+                 )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             ORDER BY
@@ -791,6 +1023,10 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                     SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                     WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  )
+                 OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                 OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                  OR (
                     CAST(:qCanonical AS VARCHAR) <> ''
                     AND (
@@ -806,7 +1042,30 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                             SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.specialty_tags, '[]'::jsonb)) tag
                             WHERE LOWER(tag) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                          )
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%'))
                     )
+                 )
+                 OR (
+                   CAST(:qExpanded AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:qExpanded AS VARCHAR), '|')) AS x(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(u.full_name, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
                  )
             )
             AND (CAST(:verified AS BOOLEAN) IS NULL OR cp.is_verified = CAST(:verified AS BOOLEAN))
@@ -860,17 +1119,36 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                          )
                     )
                  )
+                 OR (
+                   CAST(:specialiteSignals AS VARCHAR) <> ''
+                   AND EXISTS (
+                     SELECT 1 FROM unnest(string_to_array(CAST(:specialiteSignals AS VARCHAR), '|')) AS sig(term)
+                     WHERE length(btrim(term)) >= 2
+                       AND (
+                         LOWER(COALESCE(cp.bio, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialite, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_description, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.shop_selling_focus, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialties::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.specialty_tags::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.strengths_tools_mastered::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                         OR LOWER(COALESCE(cp.profile_services::text, '')) LIKE LOWER(CONCAT('%', btrim(term), '%'))
+                       )
+                   )
+                 )
             )
             """,
             nativeQuery = true)
     Page<CreatorProfile> searchByBioOrSpecialiteByDistance(
             @Param("q") String q,
             @Param("qCanonical") String qCanonical,
+            @Param("qExpanded") String qExpanded,
             @Param("verified") Boolean verified,
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
             @Param("specialite") String specialite,
             @Param("specialiteAlt") String specialiteAlt,
+            @Param("specialiteSignals") String specialiteSignals,
             @Param("minYearsExperience") Integer minYearsExperience,
             @Param("lat") double lat,
             @Param("lng") double lng,

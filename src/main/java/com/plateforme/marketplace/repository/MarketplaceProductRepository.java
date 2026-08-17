@@ -44,12 +44,8 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
                 OR LOWER(p.title) LIKE LOWER(CONCAT('%', :q, '%'))
                 OR LOWER(COALESCE(p.description, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                 OR LOWER(CAST(p.tags AS string)) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR LOWER(COALESCE(p.creator.fullName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR EXISTS (
-                    SELECT 1 FROM CreatorProfile cp
-                    WHERE cp.user.id = p.creator.id
-                    AND LOWER(COALESCE(cp.shopName, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                ))
+                OR LOWER(COALESCE(p.genre, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(COALESCE(p.specialite, '')) LIKE LOWER(CONCAT('%', :q, '%')))
             AND (:freeOnly = true AND p.priceCents = 0
                 OR :freeOnly = false
                     AND (:minPriceCents IS NULL OR p.priceCents >= :minPriceCents)

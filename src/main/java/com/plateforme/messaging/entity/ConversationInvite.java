@@ -24,6 +24,11 @@ public class ConversationInvite {
     @JoinColumn(name = "conversation_id", nullable = false)
     private Conversation conversation;
 
+    /** Permanent conversation from which this temporary invite was started (nullable for legacy). */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_conversation_id")
+    private Conversation sourceConversation;
+
     @Column(nullable = false, unique = true, length = 64)
     private String token;
 

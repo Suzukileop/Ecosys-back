@@ -26,4 +26,16 @@ public interface ConversationInviteRepository extends JpaRepository<Conversation
 
     List<ConversationInvite> findByCreatedBy_IdAndStatusAndInviteeIsNotNullOrderByCreatedAtDesc(
             UUID createdById, InviteStatus status);
+
+    List<ConversationInvite> findBySourceConversation_IdAndStatus(UUID sourceConversationId, InviteStatus status);
+
+    @Query("""
+            SELECT i FROM ConversationInvite i
+            WHERE i.status = :status
+              AND i.invitee IS NOT NULL
+              AND (i.conversation.id = :conversationId OR i.sourceConversation.id = :conversationId)
+            """)
+    List<ConversationInvite> findPendingRelatedToConversation(
+            @Param("conversationId") UUID conversationId,
+            @Param("status") InviteStatus status);
 }

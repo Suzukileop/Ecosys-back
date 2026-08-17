@@ -87,6 +87,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers("/api/chat/**").authenticated()
                         .requestMatchers("/api/messaging/**").authenticated()
+                        .requestMatchers("/api/presence/**").authenticated()
                         .requestMatchers("/api/ecosystem/**").authenticated()
                         .requestMatchers("/api/agent/**").authenticated()
                         .requestMatchers("/api/notifications/**").authenticated()

@@ -8,7 +8,9 @@ import com.plateforme.marketplace.entity.ContentPost;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
+import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.FollowerPublishNotifyService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -38,6 +40,8 @@ public class ContentPostService {
 
     private final ContentPostRepository contentPostRepository;
     private final UserRepository userRepository;
+    private final CreatorProfileRepository creatorProfileRepository;
+    private final FollowerPublishNotifyService followerPublishNotifyService;
 
     @Transactional
     public ContentPostResponse createPost(UUID creatorId, ContentPostRequest req) {
@@ -53,6 +57,11 @@ public class ContentPostService {
         applyRequest(post, req, taggedIds);
 
         post = contentPostRepository.save(post);
+
+        if (Boolean.TRUE.equals(post.getIsPublic())) {
+            followerPublishNotifyService.notifyFollowersNewContent(
+                    creatorId, post.getId(), contentPreview(post));
+        }
 
         long portfolioCount = contentPostRepository.countActiveByCreator_Id(creatorId);
         return toResponse(post, portfolioCount);
@@ -171,8 +180,13 @@ public class ContentPostService {
     @Transactional
     public ContentPostResponse updateVisibility(UUID creatorId, UUID postId, boolean isPublic) {
         ContentPost post = requireActivePost(creatorId, postId);
+        boolean wasPublic = Boolean.TRUE.equals(post.getIsPublic());
         post.setIsPublic(isPublic);
         post = contentPostRepository.save(post);
+        if (isPublic && !wasPublic) {
+            followerPublishNotifyService.notifyFollowersNewContent(
+                    creatorId, post.getId(), contentPreview(post));
+        }
         long portfolioCount = contentPostRepository.countActiveByCreator_Id(creatorId);
         return toResponse(post, portfolioCount);
     }
@@ -201,9 +215,14 @@ public class ContentPostService {
 
         validateRequest(req, creatorId);
         List<UUID> taggedIds = normalizeTaggedUserIds(req.taggedUserIds(), creatorId);
+        boolean wasPublic = Boolean.TRUE.equals(post.getIsPublic());
         applyRequest(post, req, taggedIds);
 
         post = contentPostRepository.save(post);
+        if (Boolean.TRUE.equals(post.getIsPublic()) && !wasPublic) {
+            followerPublishNotifyService.notifyFollowersNewContent(
+                    creatorId, post.getId(), contentPreview(post));
+        }
         long portfolioCount = contentPostRepository.countActiveByCreator_Id(creatorId);
         log.info("Content updated id={} by creator={}", postId, creatorId);
         return toResponse(post, portfolioCount);
@@ -266,10 +285,19 @@ public class ContentPostService {
 
     public ContentPostResponse toResponse(ContentPost post, long portfolioCount) {
         User creator = post.getCreator();
+        var profile = creatorProfileRepository.findByUserId(creator.getId()).orElse(null);
+        String appRole = profile != null ? profile.getAppRole() : null;
+        String specialite = profile != null ? profile.getSpecialite() : null;
+        List<String> specialties = profile != null && profile.getSpecialties() != null
+                ? profile.getSpecialties()
+                : List.of();
         MinimalUserDto minimal = new MinimalUserDto(
                 creator.getId(),
                 creator.getFullName(),
-                creator.getAvatarUrl()
+                creator.getAvatarUrl(),
+                appRole,
+                specialite,
+                specialties
         );
         List<String> tools = post.getToolsUsed() != null ? post.getToolsUsed() : List.of();
         List<String> tags = post.getTags() != null ? post.getTags() : List.of();
@@ -421,6 +449,16 @@ public class ContentPostService {
             return "FILE";
         }
         return mediaType.trim().toUpperCase();
+    }
+
+    private static String contentPreview(ContentPost post) {
+        if (post.getTitle() != null && !post.getTitle().isBlank()) {
+            return post.getTitle().trim();
+        }
+        if (post.getDescription() != null && !post.getDescription().isBlank()) {
+            return post.getDescription().trim();
+        }
+        return "a new post";
     }
 
     private static String blankToNull(String value) {

@@ -73,7 +73,7 @@ class MarketplaceCreatorSearchRelevanceTest {
     @DisplayName("q=dev expands to Developer for exact specialty ranking")
     void search_expandsDevAliasToDeveloperCanonical() {
         when(creatorProfileRepository.searchByBioOrSpecialite(
-                        anyString(), anyString(), any(), any(), any(), any(), anyString(), any(), any()))
+                        anyString(), anyString(), anyString(), any(), any(), any(), any(), anyString(), anyString(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.searchCreators(
@@ -81,20 +81,24 @@ class MarketplaceCreatorSearchRelevanceTest {
 
         ArgumentCaptor<String> qCap = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> qCanonCap = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> qExpandedCap = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Boolean> verifiedCap = ArgumentCaptor.forClass(Boolean.class);
         verify(creatorProfileRepository).searchByBioOrSpecialite(
                 qCap.capture(),
                 qCanonCap.capture(),
+                qExpandedCap.capture(),
                 verifiedCap.capture(),
                 isNull(),
                 isNull(),
                 isNull(),
+                eq(""),
                 eq(""),
                 isNull(),
                 eq(pageable));
 
         assertThat(qCap.getValue()).isEqualTo("dev");
         assertThat(qCanonCap.getValue()).isEqualTo("Developer");
+        assertThat(qExpandedCap.getValue()).containsIgnoringCase("Developer");
         assertThat(verifiedCap.getValue()).isTrue();
     }
 
@@ -102,7 +106,7 @@ class MarketplaceCreatorSearchRelevanceTest {
     @DisplayName("Popular chip specialite=dev prefers canonical Developer + alt raw")
     void list_expandsSpecialtyChipForExactFirstRanking() {
         when(creatorProfileRepository.findForMarketplace(
-                        any(), anyString(), any(), any(), any(), any(), any()))
+                        any(), anyString(), anyString(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.getCreators(
@@ -110,9 +114,11 @@ class MarketplaceCreatorSearchRelevanceTest {
 
         ArgumentCaptor<String> primaryCap = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> altCap = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> signalsCap = ArgumentCaptor.forClass(String.class);
         verify(creatorProfileRepository).findForMarketplace(
                 primaryCap.capture(),
                 altCap.capture(),
+                signalsCap.capture(),
                 isNull(),
                 isNull(),
                 isNull(),
@@ -121,13 +127,15 @@ class MarketplaceCreatorSearchRelevanceTest {
 
         assertThat(primaryCap.getValue()).isEqualTo("Developer");
         assertThat(altCap.getValue()).isEqualTo("dev");
+        assertThat(signalsCap.getValue()).isNotBlank();
+        assertThat(signalsCap.getValue().toLowerCase()).contains("developer");
     }
 
     @Test
     @DisplayName("blank keyword falls back to list path with verified")
     void search_blankKeywordUsesListWithVerified() {
         when(creatorProfileRepository.findForMarketplace(
-                        any(), anyString(), any(), any(), any(), any(), any()))
+                        any(), anyString(), anyString(), any(), any(), any(), any(), any()))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.searchCreators(
@@ -136,6 +144,7 @@ class MarketplaceCreatorSearchRelevanceTest {
         verify(creatorProfileRepository).findForMarketplace(
                 eq("Data science"),
                 eq(""),
+                anyString(),
                 eq(true),
                 isNull(),
                 isNull(),

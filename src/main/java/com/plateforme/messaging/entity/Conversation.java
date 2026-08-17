@@ -46,6 +46,10 @@ public class Conversation {
     @Column(name = "cover_url", length = 500)
     private String coverUrl;
 
+    /** True when this conversation is an isolated temporary guest room (not a permanent DM/group). */
+    @Column(name = "temporary_session", nullable = false)
+    private boolean temporarySession = false;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;

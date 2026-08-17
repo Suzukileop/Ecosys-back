@@ -25,8 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -39,6 +41,7 @@ public class CreatorProfileService {
     private final UserRepository userRepository;
     private final CreatorPortfolioService creatorPortfolioService;
     private final CreatorReviewService creatorReviewService;
+    private final FollowerPublishNotifyService followerPublishNotifyService;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -157,10 +160,13 @@ public class CreatorProfileService {
                     profile.getProfileServices(), dto.profileServices())) {
                 CreatorProfileReadinessSupport.requireReady(user, profile, true);
             }
+            List<ProfileServiceDto> previousServices = safeServices(profile.getProfileServices());
             List<String> allowedSpecialties = SpecialtyTaxonomy.normalizeSpecialties(
                     profile.getSpecialties(), profile.getSpecialite());
-            profile.setProfileServices(new ArrayList<>(
-                    ProfileExtensionsSupport.normalizeServices(dto.profileServices(), allowedSpecialties)));
+            List<ProfileServiceDto> normalized = new ArrayList<>(
+                    ProfileExtensionsSupport.normalizeServices(dto.profileServices(), allowedSpecialties));
+            profile.setProfileServices(normalized);
+            notifyFollowersOfNewActiveServices(userId, previousServices, normalized);
         }
 
         if (dto.typicalResponseTime() != null) {
@@ -391,6 +397,31 @@ public class CreatorProfileService {
 
     private static List<ProfileMediaBlock> safeBlocks(List<ProfileMediaBlock> blocks) {
         return blocks != null ? blocks : List.of();
+    }
+
+    private void notifyFollowersOfNewActiveServices(
+            UUID creatorId,
+            List<ProfileServiceDto> previous,
+            List<ProfileServiceDto> next) {
+        Set<UUID> previousIds = new HashSet<>();
+        for (ProfileServiceDto item : previous) {
+            if (item != null && item.id() != null) {
+                previousIds.add(item.id());
+            }
+        }
+        for (ProfileServiceDto item : next) {
+            if (item == null || item.id() == null) {
+                continue;
+            }
+            String status = item.status() != null ? item.status().trim().toUpperCase() : "ACTIVE";
+            if (!"ACTIVE".equals(status)) {
+                continue;
+            }
+            if (!previousIds.contains(item.id())) {
+                followerPublishNotifyService.notifyFollowersNewService(
+                        creatorId, item.id(), item.title());
+            }
+        }
     }
 
     private static List<ProfileStrengthToolDto> safeStrengths(List<ProfileStrengthToolDto> strengths) {

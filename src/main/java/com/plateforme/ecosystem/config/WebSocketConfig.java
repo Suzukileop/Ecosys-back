@@ -5,9 +5,10 @@ import com.plateforme.auth.security.JwtUtils;
 import com.plateforme.auth.security.UserDetailsServiceImpl;
 import com.plateforme.messaging.service.MessagingParticipantGuard;
 import com.plateforme.user.entity.User;
-import lombok.RequiredArgsConstructor;
+import com.plateforme.user.presence.PresenceService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
@@ -30,7 +31,6 @@ import java.util.regex.Pattern;
 
 @Configuration
 @EnableWebSocketMessageBroker
-@RequiredArgsConstructor
 @Slf4j
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
@@ -40,9 +40,24 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private static final Pattern CONVERSATION_APP =
             Pattern.compile("^/app/conversations/([0-9a-fA-F-]{36})(?:/.*)?$");
 
+    private static final Pattern PRESENCE_TOPIC =
+            Pattern.compile("^/topic/presence/([0-9a-fA-F-]{36})$");
+
     private final JwtUtils jwtUtils;
     private final UserDetailsServiceImpl userDetailsService;
     private final MessagingParticipantGuard participantGuard;
+    private final PresenceService presenceService;
+
+    public WebSocketConfig(
+            JwtUtils jwtUtils,
+            UserDetailsServiceImpl userDetailsService,
+            MessagingParticipantGuard participantGuard,
+            @Lazy PresenceService presenceService) {
+        this.jwtUtils = jwtUtils;
+        this.userDetailsService = userDetailsService;
+        this.participantGuard = participantGuard;
+        this.presenceService = presenceService;
+    }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
@@ -79,6 +94,16 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                                                 userDetails, null, userDetails.getAuthorities());
                                 accessor.setUser(authentication);
                                 log.debug("WebSocket CONNECT authentifié pour user={}", username);
+
+                                // Register presence here — SessionConnectedEvent often has a null principal.
+                                String sessionId = accessor.getSessionId();
+                                if (sessionId != null && userDetails instanceof User user) {
+                                    try {
+                                        presenceService.sessionConnected(user.getId(), sessionId);
+                                    } catch (Exception ex) {
+                                        log.warn("Presence connect failed user={}: {}", username, ex.getMessage());
+                                    }
+                                }
                             } else {
                                 log.warn("Token JWT invalide lors de la connexion WebSocket");
                             }
@@ -90,9 +115,29 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                     }
                 }
 
+                if (accessor != null && StompCommand.DISCONNECT.equals(accessor.getCommand())) {
+                    String sessionId = accessor.getSessionId();
+                    if (sessionId != null) {
+                        try {
+                            presenceService.sessionDisconnected(sessionId);
+                        } catch (Exception ex) {
+                            log.warn("Presence disconnect failed session={}: {}", sessionId, ex.getMessage());
+                        }
+                    }
+                }
+
                 if (accessor != null && StompCommand.SUBSCRIBE.equals(accessor.getCommand())) {
                     String destination = accessor.getDestination();
                     if (destination != null) {
+                        Matcher presenceMatcher = PRESENCE_TOPIC.matcher(destination);
+                        if (presenceMatcher.matches()) {
+                            if (accessor.getUser() == null) {
+                                log.debug("SUBSCRIBE denied presence — unauthenticated");
+                                return null;
+                            }
+                            CurrentUserUtil.requireUser(accessor.getUser());
+                        }
+
                         Matcher matcher = CONVERSATION_TOPIC.matcher(destination);
                         if (matcher.matches() && accessor.getUser() != null) {
                             UUID conversationId = UUID.fromString(matcher.group(1));

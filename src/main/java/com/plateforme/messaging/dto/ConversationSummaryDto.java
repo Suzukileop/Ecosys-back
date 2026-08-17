@@ -22,6 +22,8 @@ public record ConversationSummaryDto(
         LocalDateTime updatedAt,
         long unreadCount,
         boolean guestSession,
-        LocalDateTime guestExpiresAt
+        LocalDateTime guestExpiresAt,
+        boolean temporarySession,
+        boolean archived
 ) {
 }

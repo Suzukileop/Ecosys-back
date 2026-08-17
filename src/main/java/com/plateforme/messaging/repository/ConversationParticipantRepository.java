@@ -36,6 +36,7 @@ public interface ConversationParticipantRepository extends JpaRepository<Convers
             WHERE cp.user.id = :userId
             AND cp.role = com.plateforme.messaging.entity.ParticipantRole.GUEST
             AND cp.leftAt IS NOT NULL
+            AND cp.inboxDismissedAt IS NULL
             ORDER BY cp.leftAt DESC
             """)
     List<ConversationParticipant> findEndedGuestParticipationsByUserId(

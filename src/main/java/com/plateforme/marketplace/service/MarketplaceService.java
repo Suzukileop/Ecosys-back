@@ -25,6 +25,7 @@ import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.CreatorProfileVisitRepository;
 import com.plateforme.user.service.CreatorFollowService;
 import com.plateforme.user.service.CreatorPortfolioService;
+import com.plateforme.user.service.CreatorSearchExpand;
 import com.plateforme.user.service.PortfolioSettingsSupport;
 import com.plateforme.user.service.CreatorResponseTimeService;
 import com.plateforme.user.service.CreatorReviewService;
@@ -96,17 +97,21 @@ public class MarketplaceService {
                                                     UUID viewerUserId, Pageable pageable) {
         String specialitePrimary = resolveSpecialtyPrimary(specialite);
         String specialiteAlt = SpecialtyTaxonomy.alternateSearchTerm(specialite);
+        String specialiteSignals = specialitePrimary == null
+                ? ""
+                : CreatorSearchExpand.specialtySignalsPipe(specialitePrimary);
         String nationalityFilter = ProfileExtensionsSupport.normalizeNationality(nationality);
         Integer yearsFilter = normalizeMinYearsExperience(minYearsExperience);
         boolean byDistance = wantsDistanceSort(sort, lat, lng);
+        boolean withDistance = hasViewerLocation(lat, lng);
 
         Page<CreatorProfile> page = byDistance
                 ? creatorProfileRepository.findForMarketplaceByDistance(
-                        specialitePrimary, specialiteAlt, verified, available, nationalityFilter, yearsFilter,
-                        lat, lng, pageable)
+                        specialitePrimary, specialiteAlt, specialiteSignals, verified, available,
+                        nationalityFilter, yearsFilter, lat, lng, pageable)
                 : creatorProfileRepository.findForMarketplace(
-                        specialitePrimary, specialiteAlt, verified, available, nationalityFilter, yearsFilter,
-                        pageable);
+                        specialitePrimary, specialiteAlt, specialiteSignals, verified, available,
+                        nationalityFilter, yearsFilter, pageable);
         List<UUID> creatorIds = page.getContent().stream().map(p -> p.getUser().getId()).toList();
         Set<UUID> followedIds = creatorFollowService.getFollowedCreatorIds(viewerUserId, creatorIds);
         Map<UUID, Long> followerCounts = creatorFollowService.getFollowerCounts(creatorIds);
@@ -116,7 +121,7 @@ public class MarketplaceService {
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
                 followedIds.contains(profile.getUser().getId()),
-                byDistance ? distanceKm(lat, lng, profile) : null));
+                withDistance ? distanceKm(lat, lng, profile) : null));
     }
 
     @Transactional(readOnly = true)
@@ -127,17 +132,21 @@ public class MarketplaceService {
         String nationalityFilter = ProfileExtensionsSupport.normalizeNationality(nationality);
         String specialitePrimary = resolveSpecialtyPrimary(specialite);
         String specialiteAlt = SpecialtyTaxonomy.alternateSearchTerm(specialite);
+        String specialiteSignals = specialitePrimary == null
+                ? ""
+                : CreatorSearchExpand.specialtySignalsPipe(specialitePrimary);
         Integer yearsFilter = normalizeMinYearsExperience(minYearsExperience);
         boolean byDistance = wantsDistanceSort(sort, lat, lng);
+        boolean withDistance = hasViewerLocation(lat, lng);
         Page<CreatorProfile> page;
         if (keyword == null || keyword.isBlank()) {
             page = byDistance
                     ? creatorProfileRepository.findForMarketplaceByDistance(
-                            specialitePrimary, specialiteAlt, verified, available, nationalityFilter, yearsFilter,
-                            lat, lng, pageable)
+                            specialitePrimary, specialiteAlt, specialiteSignals, verified, available,
+                            nationalityFilter, yearsFilter, lat, lng, pageable)
                     : creatorProfileRepository.findForMarketplace(
-                            specialitePrimary, specialiteAlt, verified, available, nationalityFilter, yearsFilter,
-                            pageable);
+                            specialitePrimary, specialiteAlt, specialiteSignals, verified, available,
+                            nationalityFilter, yearsFilter, pageable);
         } else {
             String q = keyword.trim();
             if (q.length() > SpecialtyTaxonomy.MAX_SPECIALTY_LENGTH) {
@@ -147,14 +156,15 @@ public class MarketplaceService {
             if (qCanonical == null || qCanonical.equalsIgnoreCase(q)) {
                 qCanonical = "";
             }
+            String qExpanded = CreatorSearchExpand.expandedTermsPipe(q);
             if (byDistance) {
                 page = creatorProfileRepository.searchByBioOrSpecialiteByDistance(
-                        q, qCanonical, verified, available, nationalityFilter, specialitePrimary, specialiteAlt,
-                        yearsFilter, lat, lng, pageable);
+                        q, qCanonical, qExpanded, verified, available, nationalityFilter,
+                        specialitePrimary, specialiteAlt, specialiteSignals, yearsFilter, lat, lng, pageable);
             } else {
                 page = creatorProfileRepository.searchByBioOrSpecialite(
-                        q, qCanonical, verified, available, nationalityFilter, specialitePrimary, specialiteAlt,
-                        yearsFilter, pageable);
+                        q, qCanonical, qExpanded, verified, available, nationalityFilter,
+                        specialitePrimary, specialiteAlt, specialiteSignals, yearsFilter, pageable);
             }
         }
 
@@ -167,7 +177,7 @@ public class MarketplaceService {
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
                 followedIds.contains(profile.getUser().getId()),
-                byDistance ? distanceKm(lat, lng, profile) : null));
+                withDistance ? distanceKm(lat, lng, profile) : null));
     }
 
     @Transactional(readOnly = true)
@@ -408,11 +418,15 @@ public class MarketplaceService {
         return 2;
     }
 
-    private static boolean wantsDistanceSort(String sort, Double lat, Double lng) {
+    private static boolean hasViewerLocation(Double lat, Double lng) {
         if (lat == null || lng == null) {
             return false;
         }
-        if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    }
+
+    private static boolean wantsDistanceSort(String sort, Double lat, Double lng) {
+        if (!hasViewerLocation(lat, lng)) {
             return false;
         }
         return sort != null && sort.equalsIgnoreCase("distance");

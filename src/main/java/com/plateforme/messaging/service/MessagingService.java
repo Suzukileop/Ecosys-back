@@ -13,6 +13,7 @@ import com.plateforme.messaging.dto.DirectMessageDto;
 import com.plateforme.messaging.dto.MessageAttachmentDto;
 import com.plateforme.messaging.dto.PendingConversationInviteDto;
 import com.plateforme.messaging.dto.TemporaryInboxEntryDto;
+import com.plateforme.messaging.dto.TemporaryInboxMemberDto;
 import com.plateforme.messaging.dto.OutgoingGuestInviteDto;
 import com.plateforme.messaging.entity.*;
 import com.plateforme.messaging.repository.*;
@@ -164,6 +165,11 @@ public class MessagingService {
 
     @Transactional(readOnly = true)
     public List<ConversationSummaryDto> listConversationsForUser(UUID userId) {
+        return listConversationsForUser(userId, false);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ConversationSummaryDto> listConversationsForUser(UUID userId, boolean archivedOnly) {
         List<Conversation> conversations = conversationRepository.findAllForUserOrderByUpdatedAtDesc(userId);
         if (conversations.isEmpty()) {
             return List.of();
@@ -179,6 +185,10 @@ public class MessagingService {
         List<ConversationSummaryDto> result = new ArrayList<>();
 
         for (Conversation conversation : conversations) {
+            if (conversation.isTemporarySession()) {
+                // Temporary rooms are exposed via temporary inbox / avatar strip only.
+                continue;
+            }
             List<ConversationParticipant> participants =
                     participantsByConversation.getOrDefault(conversation.getId(), List.of());
             ConversationParticipant self = participants.stream()
@@ -186,6 +196,10 @@ public class MessagingService {
                     .findFirst()
                     .orElse(null);
             if (self == null || !participantGuard.isParticipantActive(self)) {
+                continue;
+            }
+            boolean isArchived = self.getInboxArchivedAt() != null;
+            if (archivedOnly != isArchived) {
                 continue;
             }
 
@@ -328,6 +342,7 @@ public class MessagingService {
         conversationRepository.save(conversation);
 
         DirectMessageDto dto = toDto(saved, List.of(attachment));
+        clearInboxArchiveForConversation(conversationId);
         broadcastMessage(conversationId, dto);
         triggerCreatorResponseTimeRecalc(sender);
         return dto;
@@ -391,6 +406,12 @@ public class MessagingService {
         }
 
         Conversation conversation = requireConversation(conversationId);
+        if (conversation.isTemporarySession()) {
+            throw new BusinessException(
+                    "INVALID_SOURCE",
+                    "Temporary invites must be started from a permanent conversation.");
+        }
+
         if (participantRepository.findByConversation_IdAndUser_Id(conversationId, inviteeUserId)
                 .filter(participantGuard::isParticipantActive)
                 .isPresent()) {
@@ -408,8 +429,10 @@ public class MessagingService {
             expiresInHours = 48;
         }
 
+        // Guest joins the existing A↔B conversation — no separate temporary inbox for hosts.
         ConversationInvite invite = new ConversationInvite();
         invite.setConversation(conversation);
+        invite.setSourceConversation(conversation);
         invite.setToken(generateInviteToken());
         invite.setCreatedBy(creator);
         invite.setInvitee(invitee);
@@ -445,8 +468,7 @@ public class MessagingService {
     @Transactional(readOnly = true)
     public List<OutgoingGuestInviteDto> listOutgoingGuestInvites(UUID conversationId, UUID userId) {
         assertParticipant(conversationId, userId);
-        return inviteRepository.findByConversation_IdAndStatus(conversationId, InviteStatus.PENDING).stream()
-                .filter(invite -> invite.getInvitee() != null)
+        return inviteRepository.findPendingRelatedToConversation(conversationId, InviteStatus.PENDING).stream()
                 .filter(invite -> invite.getExpiresAt().isAfter(LocalDateTime.now()))
                 .map(this::toOutgoingGuestInviteDto)
                 .toList();
@@ -457,7 +479,10 @@ public class MessagingService {
         assertParticipant(conversationId, actorId);
         ConversationInvite invite = inviteRepository.findById(inviteId)
                 .orElseThrow(() -> new BusinessException("INVITE_NOT_FOUND", "Invite not found."));
-        if (!invite.getConversation().getId().equals(conversationId)) {
+        boolean related = invite.getConversation().getId().equals(conversationId)
+                || (invite.getSourceConversation() != null
+                        && invite.getSourceConversation().getId().equals(conversationId));
+        if (!related) {
             throw new BusinessException("INVITE_NOT_FOUND", "Invite not found.");
         }
         if (invite.getInvitee() == null || invite.getStatus() != InviteStatus.PENDING) {
@@ -488,7 +513,8 @@ public class MessagingService {
                     invite.inviterAvatarUrl(),
                     invite.createdAt(),
                     invite.id(),
-                    true));
+                    true,
+                    List.of()));
         }
 
         for (ConversationInvite invite : inviteRepository
@@ -507,27 +533,57 @@ public class MessagingService {
                     invite.getInvitee().getAvatarUrl(),
                     invite.getCreatedAt(),
                     invite.getId(),
-                    false));
+                    false,
+                    List.of()));
         }
 
-        for (ConversationSummaryDto summary : listConversationsForUser(userId)) {
-            if (!summary.guestSession()) {
+        List<Conversation> conversations = conversationRepository.findAllForUserOrderByUpdatedAtDesc(userId);
+        List<UUID> conversationIds = conversations.stream().map(Conversation::getId).toList();
+        Map<UUID, List<ConversationParticipant>> participantsByConversation = conversationIds.isEmpty()
+                ? Map.of()
+                : participantRepository.findByConversation_IdInWithUser(conversationIds).stream()
+                        .collect(Collectors.groupingBy(p -> p.getConversation().getId()));
+
+        for (Conversation conversation : conversations) {
+            List<ConversationParticipant> participants =
+                    participantsByConversation.getOrDefault(conversation.getId(), List.of());
+            List<ConversationParticipant> active = participants.stream()
+                    .filter(participantGuard::isParticipantActive)
+                    .toList();
+            ConversationParticipant self = active.stream()
+                    .filter(p -> p.getUser() != null && p.getUser().getId().equals(userId))
+                    .findFirst()
+                    .orElse(null);
+            if (self == null || self.getRole() != ParticipantRole.GUEST) {
+                // Temporary inbox bubbles are invitee-only. Hosts keep using their normal DM row.
                 continue;
             }
-            activeGuestConversationIds.add(summary.id());
+            if (conversation.isTemporarySession()) {
+                // Isolated temporary rooms are deprecated — guests must use the permanent conversation.
+                continue;
+            }
+            if (!canGuestReadMessages(self)) {
+                continue;
+            }
+
+            activeGuestConversationIds.add(conversation.getId());
+            ConversationSummaryDto summary = toSummary(conversation, userId, participants);
+            String title = summary.title() != null && !summary.title().isBlank()
+                    ? summary.title()
+                    : summary.otherUserFullName();
+
             entries.add(new TemporaryInboxEntryDto(
                     "ACTIVE_GUEST",
-                    summary.id(),
-                    summary.id(),
-                    summary.title() != null && !summary.title().isBlank()
-                            ? summary.title()
-                            : summary.otherUserFullName(),
+                    conversation.getId(),
+                    conversation.getId(),
+                    title,
                     summary.otherUserFullName(),
                     "Temporary guest access",
                     summary.otherUserAvatarUrl(),
                     summary.lastMessageAt() != null ? summary.lastMessageAt() : summary.updatedAt(),
                     null,
-                    true));
+                    true,
+                    toTemporaryMembers(active)));
         }
 
         Pageable endedGuestPage = PageRequest.of(0, 30);
@@ -548,7 +604,8 @@ public class MessagingService {
                     conversation.getCoverUrl(),
                     participation.getLeftAt() != null ? participation.getLeftAt() : participation.getJoinedAt(),
                     null,
-                    true));
+                    true,
+                    List.of()));
         }
 
         entries.sort((left, right) -> {
@@ -557,6 +614,16 @@ public class MessagingService {
             return rightAt.compareTo(leftAt);
         });
         return entries;
+    }
+
+    private List<TemporaryInboxMemberDto> toTemporaryMembers(List<ConversationParticipant> participants) {
+        return participants.stream()
+                .filter(participantGuard::isParticipantActive)
+                .filter(participant -> participant.getUser() != null)
+                .map(participant -> new TemporaryInboxMemberDto(
+                        participant.getUser().getFullName(),
+                        participant.getUser().getAvatarUrl()))
+                .toList();
     }
 
     @Transactional
@@ -622,6 +689,7 @@ public class MessagingService {
         }
 
         UUID conversationId = invite.getConversation().getId();
+        Conversation targetConversation = invite.getConversation();
         if (participantRepository.findByConversation_IdAndUser_Id(conversationId, userId)
                 .filter(participantGuard::isParticipantActive)
                 .isPresent()) {
@@ -630,13 +698,16 @@ public class MessagingService {
                 invite.setUseCount(Math.min(invite.getUseCount() + 1, invite.getMaxUses()));
                 inviteRepository.save(invite);
             }
+            if (!targetConversation.isTemporarySession()) {
+                endIsolatedTemporaryGuestSeats(userId, conversationId);
+            }
             markAsRead(conversationId, userId);
             return toSummary(requireConversation(conversationId), userId,
                     loadParticipantsByConversation(conversationId));
         }
 
         User user = requireActiveUser(userId);
-        addParticipant(invite.getConversation(), user, invite.getRole(), invite.getExpiresAt());
+        addParticipant(targetConversation, user, invite.getRole(), invite.getExpiresAt());
 
         invite.setUseCount(invite.getUseCount() + 1);
         if (invite.getInvitee() != null) {
@@ -644,15 +715,46 @@ public class MessagingService {
         }
         inviteRepository.save(invite);
 
+        if (!targetConversation.isTemporarySession()) {
+            endIsolatedTemporaryGuestSeats(userId, conversationId);
+        }
+
         DirectMessage system = new DirectMessage();
-        system.setConversation(invite.getConversation());
+        system.setConversation(targetConversation);
         system.setSender(user);
         system.setMessageType(MessageType.SYSTEM);
         system.setContent(user.getFullName() + " joined as a temporary guest.");
         directMessageRepository.save(system);
         broadcastMessage(conversationId, toDto(system, List.of()));
 
-        return toSummary(invite.getConversation(), userId, loadParticipantsByConversation(conversationId));
+        return toSummary(targetConversation, userId, loadParticipantsByConversation(conversationId));
+    }
+
+    /**
+     * Guests must not keep chatting in isolated temporary rooms — hosts only watch the permanent DM.
+     */
+    private void endIsolatedTemporaryGuestSeats(UUID userId, UUID keepConversationId) {
+        LocalDateTime now = LocalDateTime.now();
+        for (Conversation conversation : conversationRepository.findAllForUserOrderByUpdatedAtDesc(userId)) {
+            if (!conversation.isTemporarySession() || conversation.getId().equals(keepConversationId)) {
+                continue;
+            }
+            participantRepository.findByConversation_IdAndUser_Id(conversation.getId(), userId)
+                    .filter(participantGuard::isParticipantActive)
+                    .filter(participant -> participant.getRole() == ParticipantRole.GUEST)
+                    .ifPresent(participant -> {
+                        participant.setLeftAt(now);
+                        participant.setExpiresAt(now);
+                        participantRepository.save(participant);
+                        inviteRepository
+                                .findByConversation_IdAndInvitee_IdAndStatus(
+                                        conversation.getId(), userId, InviteStatus.ACCEPTED)
+                                .ifPresent(oldInvite -> {
+                                    oldInvite.setStatus(InviteStatus.CANCELLED);
+                                    inviteRepository.save(oldInvite);
+                                });
+                    });
+        }
     }
 
     private ConversationInvite requireDirectInviteForUser(UUID inviteId, UUID userId) {
@@ -870,6 +972,7 @@ public class MessagingService {
         conversationRepository.save(conversation);
 
         DirectMessageDto dto = toDto(saved, List.of());
+        clearInboxArchiveForConversation(conversationId);
         broadcastMessage(conversationId, dto);
         triggerCreatorResponseTimeRecalc(sender);
         return dto;
@@ -923,8 +1026,122 @@ public class MessagingService {
         participant.setRole(role);
         participant.setExpiresAt(expiresAt);
         participant.setLeftAt(null);
+        participant.setInboxDismissedAt(null);
+        participant.setInboxArchivedAt(null);
         participant.setJoinedAt(LocalDateTime.now());
         return participantRepository.save(participant);
+    }
+
+    /**
+     * Soft-hide a conversation from the current user's main inbox (leave for self only).
+     * Reopening via find-or-create reactivates the participation.
+     */
+    @Transactional
+    public void hideConversationFromInbox(UUID conversationId, UUID userId) {
+        ConversationParticipant participant = participantRepository
+                .findByConversation_IdAndUser_Id(conversationId, userId)
+                .orElseThrow(() -> new BusinessException("NOT_PARTICIPANT", "You are not in this conversation."));
+
+        LocalDateTime now = LocalDateTime.now();
+        if (participant.getLeftAt() == null) {
+            participant.setLeftAt(now);
+        }
+        participant.setInboxDismissedAt(now);
+        participant.setInboxArchivedAt(null);
+        if (participant.getRole() == ParticipantRole.GUEST && participant.getExpiresAt() == null) {
+            participant.setExpiresAt(now);
+        }
+        participantRepository.save(participant);
+        log.info("Conversation {} hidden from inbox for user {}", conversationId, userId);
+    }
+
+    @Transactional
+    public void archiveConversation(UUID conversationId, UUID userId) {
+        ConversationParticipant participant = participantGuard.requireActiveParticipant(conversationId, userId);
+        participant.setInboxArchivedAt(LocalDateTime.now());
+        participantRepository.save(participant);
+        log.info("Conversation {} archived for user {}", conversationId, userId);
+    }
+
+    @Transactional
+    public void unarchiveConversation(UUID conversationId, UUID userId) {
+        ConversationParticipant participant = participantGuard.requireActiveParticipant(conversationId, userId);
+        participant.setInboxArchivedAt(null);
+        participantRepository.save(participant);
+        log.info("Conversation {} unarchived for user {}", conversationId, userId);
+    }
+
+    /**
+     * Force the conversation to appear unread for the current user (Messenger-style).
+     */
+    @Transactional
+    public void markAsUnread(UUID conversationId, UUID userId) {
+        ConversationParticipant participant = participantGuard.requireActiveParticipant(conversationId, userId);
+        DirectMessage lastMessage = directMessageRepository
+                .findFirstByConversation_IdOrderBySentAtDesc(conversationId)
+                .orElse(null);
+        if (lastMessage != null && lastMessage.getSentAt() != null) {
+            participant.setLastReadAt(lastMessage.getSentAt().minusSeconds(1));
+        } else {
+            participant.setLastReadAt(null);
+        }
+        participantRepository.save(participant);
+        log.info("Conversation {} marked unread for user {}", conversationId, userId);
+    }
+
+    private void clearInboxArchiveForConversation(UUID conversationId) {
+        List<ConversationParticipant> participants = participantRepository.findByConversation_Id(conversationId);
+        boolean changed = false;
+        for (ConversationParticipant participant : participants) {
+            if (participant.getInboxArchivedAt() != null) {
+                participant.setInboxArchivedAt(null);
+                changed = true;
+            }
+        }
+        if (changed) {
+            participantRepository.saveAll(participants);
+        }
+    }
+
+    /**
+     * Remove a temporary-inbox card for the current user.
+     * entryId is invite id for invites, conversation id for ACTIVE_GUEST, participation id for ENDED_GUEST.
+     */
+    @Transactional
+    public void dismissTemporaryInboxEntry(String entryType, UUID entryId, UUID userId) {
+        if (entryType == null || entryType.isBlank()) {
+            throw new BusinessException("INVALID_ENTRY", "Temporary entry type is required.");
+        }
+        switch (entryType) {
+            case "INCOMING_INVITE" -> declineDirectInvite(entryId, userId);
+            case "OUTGOING_INVITE" -> {
+                ConversationInvite invite = inviteRepository.findById(entryId)
+                        .orElseThrow(() -> new BusinessException("INVITE_NOT_FOUND", "Invite not found."));
+                cancelDirectGuestInvite(invite.getConversation().getId(), userId, entryId);
+            }
+            case "ACTIVE_GUEST" -> {
+                leaveAsGuest(entryId, userId);
+                participantRepository.findByConversation_IdAndUser_Id(entryId, userId)
+                        .ifPresent(participant -> {
+                            participant.setInboxDismissedAt(LocalDateTime.now());
+                            participantRepository.save(participant);
+                        });
+            }
+            case "ENDED_GUEST" -> {
+                ConversationParticipant participation = participantRepository.findById(entryId)
+                        .orElseThrow(() -> new BusinessException("ENTRY_NOT_FOUND", "Temporary entry not found."));
+                if (participation.getUser() == null || !participation.getUser().getId().equals(userId)) {
+                    throw new BusinessException("FORBIDDEN", "You cannot dismiss this entry.");
+                }
+                if (participation.getRole() != ParticipantRole.GUEST) {
+                    throw new BusinessException("INVALID_ENTRY", "Not a guest session entry.");
+                }
+                participation.setInboxDismissedAt(LocalDateTime.now());
+                participantRepository.save(participation);
+            }
+            default -> throw new BusinessException("INVALID_ENTRY", "Unknown temporary entry type.");
+        }
+        log.info("Temporary inbox entry type={} id={} dismissed by user={}", entryType, entryId, userId);
     }
 
     private boolean canGuestReadMessages(ConversationParticipant participant) {
@@ -1024,8 +1241,12 @@ public class MessagingService {
         } else {
             ConversationParticipant other = active.stream()
                     .filter(p -> p.getUser() != null && !p.getUser().getId().equals(currentUserId))
+                    .filter(p -> p.getRole() != ParticipantRole.GUEST)
                     .findFirst()
-                    .orElse(null);
+                    .orElseGet(() -> active.stream()
+                            .filter(p -> p.getUser() != null && !p.getUser().getId().equals(currentUserId))
+                            .findFirst()
+                            .orElse(null));
             if (other != null && other.getUser() != null) {
                 otherUserId = other.getUser().getId();
                 otherUserName = other.getUser().getFullName();
@@ -1075,7 +1296,9 @@ public class MessagingService {
                 conversation.getUpdatedAt(),
                 unread,
                 self != null && self.getRole() == ParticipantRole.GUEST,
-                self != null ? self.getExpiresAt() : null
+                self != null ? self.getExpiresAt() : null,
+                conversation.isTemporarySession(),
+                self != null && self.getInboxArchivedAt() != null
         );
     }
 
@@ -1100,9 +1323,7 @@ public class MessagingService {
 
     private String formatPreview(DirectMessage message) {
         if (message.getMessageType() == MessageType.FILE) {
-            return message.getContent() != null && !message.getContent().isBlank()
-                    ? "📎 " + message.getContent()
-                    : "📎 File";
+            return formatFilePreview(message);
         }
         if (message.getMessageType() == MessageType.SYSTEM) {
             return message.getContent();
@@ -1111,6 +1332,36 @@ public class MessagingService {
             return "📞 Call";
         }
         return message.getContent();
+    }
+
+    /** WhatsApp / Messenger style: type icon + Photo / Video / Document / filename / caption. */
+    private String formatFilePreview(DirectMessage message) {
+        String caption = message.getContent() != null ? message.getContent().trim() : "";
+        List<MessageAttachment> attachments = attachmentRepository.findByMessage_IdIn(List.of(message.getId()));
+        MessageAttachment attachment = attachments.isEmpty() ? null : attachments.get(0);
+        String contentType = attachment != null && attachment.getContentType() != null
+                ? attachment.getContentType().toLowerCase()
+                : "";
+        String fileName = attachment != null && attachment.getOriginalFilename() != null
+                ? attachment.getOriginalFilename().trim()
+                : "";
+
+        if (contentType.startsWith("image/")) {
+            return caption.isEmpty() ? "📷 Photo" : "📷 " + caption;
+        }
+        if (contentType.startsWith("video/")) {
+            return caption.isEmpty() ? "🎥 Video" : "🎥 " + caption;
+        }
+        if (contentType.startsWith("audio/")) {
+            return caption.isEmpty() ? "🎵 Audio" : "🎵 " + caption;
+        }
+        if (!caption.isEmpty()) {
+            return "📄 " + caption;
+        }
+        if (!fileName.isEmpty()) {
+            return "📄 " + fileName;
+        }
+        return "📄 Document";
     }
 
     private DirectMessageDto toDto(DirectMessage message, List<MessageAttachment> attachments) {

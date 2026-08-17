@@ -174,7 +174,8 @@ public class CreatorProfileController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         UUID userId = getCurrentUserId();
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        // Unsorted: CreatorFollowService ranks by recent DIRECT messaging activity.
+        Pageable pageable = PageRequest.of(page, size);
         return ResponseEntity.ok(PagedResponse.fromPage(
                 creatorFollowService.listFollowersForCreator(userId, pageable)));
     }

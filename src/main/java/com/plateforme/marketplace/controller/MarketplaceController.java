@@ -32,6 +32,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import com.plateforme.user.dto.CreatorFollowItemDto;
 import com.plateforme.user.dto.CreatorFollowStatsDto;
 import com.plateforme.user.dto.CreatorReputationDto;
 import com.plateforme.user.dto.CreatorReviewItemDto;
@@ -299,6 +300,18 @@ public class MarketplaceController {
             @PathVariable UUID id,
             Authentication authentication) {
         return ResponseEntity.ok(creatorFollowService.getStats(id, resolveViewerUserId(authentication)));
+    }
+
+    @Operation(summary = "List recent public followers for a creator (avatar previews)")
+    @GetMapping("/creators/{id}/followers")
+    public ResponseEntity<PagedResponse<CreatorFollowItemDto>> listCreatorFollowers(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "3") int size) {
+        int safeSize = Math.min(Math.max(size, 1), 12);
+        Pageable pageable = PageRequest.of(page, safeSize);
+        return ResponseEntity.ok(PagedResponse.fromPage(
+                creatorFollowService.listFollowersForCreator(id, pageable)));
     }
 
     @Operation(summary = "Follow a creator", security = @SecurityRequirement(name = "bearerAuth"))

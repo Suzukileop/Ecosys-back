@@ -14,6 +14,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -21,6 +28,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -90,5 +98,28 @@ class CreatorFollowServiceTest {
 
         assertThat(stats.followerCount()).isEqualTo(12);
         assertThat(stats.isFollowing()).isTrue();
+    }
+
+    @Test
+    @DisplayName("listFollowersForCreator uses messaging-activity ranking with unsorted pageable")
+    void listFollowersForCreator_usesRankedQuery() {
+        when(userRepository.findByIdAndDeletedAtIsNull(creatorId)).thenReturn(Optional.of(creator));
+
+        CreatorFollow follow = new CreatorFollow();
+        follow.setId(UUID.randomUUID());
+        follow.setFollower(follower);
+        follow.setCreator(creator);
+        follow.setCreatedAt(LocalDateTime.of(2026, 1, 15, 10, 0));
+
+        Pageable requested = PageRequest.of(1, 10);
+        Pageable expectedUnsorted = PageRequest.of(1, 10);
+        when(creatorFollowRepository.findFollowersRankedByMessagingActivity(eq(creatorId), eq(expectedUnsorted)))
+                .thenReturn(new PageImpl<>(List.of(follow), expectedUnsorted, 1));
+
+        Page<?> result = creatorFollowService.listFollowersForCreator(creatorId, requested);
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(creatorFollowRepository).findFollowersRankedByMessagingActivity(eq(creatorId), eq(expectedUnsorted));
+        verify(creatorFollowRepository, never()).findByCreator_IdOrderByCreatedAtDesc(any(), any());
     }
 }

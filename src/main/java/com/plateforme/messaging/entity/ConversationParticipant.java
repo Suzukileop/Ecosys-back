@@ -47,6 +47,14 @@ public class ConversationParticipant {
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
+    /** When set, ended guest / left sessions no longer appear in temporary or main inbox. */
+    @Column(name = "inbox_dismissed_at")
+    private LocalDateTime inboxDismissedAt;
+
+    /** When set, conversation is archived for this user (hidden from main inbox). */
+    @Column(name = "inbox_archived_at")
+    private LocalDateTime inboxArchivedAt;
+
     @PrePersist
     protected void onCreate() {
         joinedAt = LocalDateTime.now();

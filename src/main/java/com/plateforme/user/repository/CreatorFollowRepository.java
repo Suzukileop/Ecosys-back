@@ -26,6 +26,48 @@ public interface CreatorFollowRepository extends JpaRepository<CreatorFollow, UU
 
     Page<CreatorFollow> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
 
+    /**
+     * Messenger-style audience ranking: recent DIRECT chat activity first, then frequency,
+     * then follow date for followers with no conversation.
+     */
+    @Query(
+            value = """
+                    SELECT cf.*
+                    FROM creator_follows cf
+                    LEFT JOIN (
+                        SELECT cp_follower.user_id AS follower_id,
+                               MAX(dm.sent_at) AS last_sent_at,
+                               COUNT(dm.id) AS message_count
+                        FROM conversations c
+                        INNER JOIN conversation_participants cp_creator
+                            ON cp_creator.conversation_id = c.id
+                           AND cp_creator.user_id = :creatorId
+                           AND cp_creator.left_at IS NULL
+                        INNER JOIN conversation_participants cp_follower
+                            ON cp_follower.conversation_id = c.id
+                           AND cp_follower.user_id <> :creatorId
+                           AND cp_follower.left_at IS NULL
+                        LEFT JOIN direct_messages dm
+                            ON dm.conversation_id = c.id
+                        WHERE c.type = 'DIRECT'
+                          AND c.temporary_session = false
+                        GROUP BY cp_follower.user_id
+                    ) activity ON activity.follower_id = cf.follower_id
+                    WHERE cf.creator_id = :creatorId
+                    ORDER BY activity.last_sent_at DESC NULLS LAST,
+                             COALESCE(activity.message_count, 0) DESC,
+                             cf.created_at DESC
+                    """,
+            countQuery = """
+                    SELECT COUNT(*)
+                    FROM creator_follows cf
+                    WHERE cf.creator_id = :creatorId
+                    """,
+            nativeQuery = true)
+    Page<CreatorFollow> findFollowersRankedByMessagingActivity(
+            @Param("creatorId") UUID creatorId,
+            Pageable pageable);
+
     @Query("""
             SELECT cf.creator.id FROM CreatorFollow cf
             WHERE cf.follower.id = :followerId AND cf.creator.id IN :creatorIds
@@ -40,4 +82,10 @@ public interface CreatorFollowRepository extends JpaRepository<CreatorFollow, UU
             GROUP BY cf.creator.id
             """)
     List<Object[]> countFollowersGrouped(@Param("creatorIds") Collection<UUID> creatorIds);
+
+    @Query("""
+            SELECT cf.follower.id FROM CreatorFollow cf
+            WHERE cf.creator.id = :creatorId
+            """)
+    List<UUID> findFollowerIdsByCreatorId(@Param("creatorId") UUID creatorId);
 }

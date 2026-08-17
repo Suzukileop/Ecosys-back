@@ -10,6 +10,7 @@ import com.plateforme.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,9 +59,12 @@ public class CreatorFollowService {
     @Transactional(readOnly = true)
     public Page<CreatorFollowItemDto> listFollowersForCreator(UUID creatorId, Pageable pageable) {
         requireCreator(creatorId);
-        Page<CreatorFollow> page = creatorFollowRepository.findByCreator_IdOrderByCreatedAtDesc(creatorId, pageable);
+        // Unsorted pageable: ranking is defined in the native query (Sort would conflict).
+        Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        Page<CreatorFollow> page = creatorFollowRepository.findFollowersRankedByMessagingActivity(
+                creatorId, unsorted);
         List<CreatorFollowItemDto> items = page.getContent().stream().map(this::toFollowItemDto).toList();
-        return new PageImpl<>(items, pageable, page.getTotalElements());
+        return new PageImpl<>(items, unsorted, page.getTotalElements());
     }
 
     private CreatorFollowItemDto toFollowItemDto(CreatorFollow follow) {

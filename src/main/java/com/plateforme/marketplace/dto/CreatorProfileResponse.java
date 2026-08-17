@@ -73,6 +73,6 @@ public record CreatorProfileResponse(
         String shopSellingFocus,
         String shopDescription,
         String shopCoverUrl,
-        /** Distance from viewer when sort=distance (km); null otherwise. */
+        /** Distance from viewer when lat/lng are provided (km); null otherwise. */
         Double distanceKm
 ) {}

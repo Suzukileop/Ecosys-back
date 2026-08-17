@@ -12,6 +12,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorProfileReadinessService;
+import com.plateforme.user.service.FollowerPublishNotifyService;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
 import com.plateforme.marketplace.service.ProductWhyBlocksSupport;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class MarketplaceProductService {
     private final UserRepository userRepository;
     private final CreatorProfileRepository creatorProfileRepository;
     private final CreatorProfileReadinessService creatorProfileReadinessService;
+    private final FollowerPublishNotifyService followerPublishNotifyService;
 
     @Transactional
     public MarketplaceProductResponse createProduct(UUID creatorId, MarketplaceProductRequest req) {
@@ -52,15 +54,24 @@ public class MarketplaceProductService {
         applyRequest(product, req);
         product = productRepository.save(product);
         log.info("Marketplace product created id={} creator={}", product.getId(), creatorId);
+        if (Boolean.TRUE.equals(product.getIsPublished())) {
+            followerPublishNotifyService.notifyFollowersNewProduct(
+                    creatorId, product.getId(), product.getTitle());
+        }
         return toResponse(product);
     }
 
     @Transactional
     public MarketplaceProductResponse updateProduct(UUID creatorId, UUID productId, MarketplaceProductRequest req) {
         MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        boolean wasPublished = Boolean.TRUE.equals(product.getIsPublished());
         applyRequest(product, req);
         product = productRepository.save(product);
         log.info("Marketplace product updated id={} creator={}", productId, creatorId);
+        if (!wasPublished && Boolean.TRUE.equals(product.getIsPublished())) {
+            followerPublishNotifyService.notifyFollowersNewProduct(
+                    creatorId, product.getId(), product.getTitle());
+        }
         return toResponse(product);
     }
 
@@ -203,12 +214,17 @@ public class MarketplaceProductService {
     @Transactional
     public MarketplaceProductResponse setPublished(UUID creatorId, UUID productId, boolean published) {
         MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        boolean wasPublished = Boolean.TRUE.equals(product.getIsPublished());
         if (published) {
             creatorProfileReadinessService.requireReadyForProducts(creatorId);
         }
         product.setIsPublished(published);
         product = productRepository.save(product);
         log.info("Marketplace product id={} published={} by creator={}", productId, published, creatorId);
+        if (published && !wasPublished) {
+            followerPublishNotifyService.notifyFollowersNewProduct(
+                    creatorId, product.getId(), product.getTitle());
+        }
         return toResponse(product);
     }
 

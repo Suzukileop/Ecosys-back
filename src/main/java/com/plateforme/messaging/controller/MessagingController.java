@@ -58,8 +58,9 @@ public class MessagingController {
 
     @GetMapping("/conversations")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<ConversationSummaryDto>> listConversations() {
-        return ResponseEntity.ok(messagingService.listConversationsForUser(getCurrentUserId()));
+    public ResponseEntity<List<ConversationSummaryDto>> listConversations(
+            @RequestParam(defaultValue = "false") boolean archived) {
+        return ResponseEntity.ok(messagingService.listConversationsForUser(getCurrentUserId(), archived));
     }
 
     @PostMapping("/conversations")
@@ -246,6 +247,43 @@ public class MessagingController {
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<List<TemporaryInboxEntryDto>> listTemporaryInbox() {
         return ResponseEntity.ok(messagingService.listTemporaryInbox(getCurrentUserId()));
+    }
+
+    @DeleteMapping("/temporary/inbox/{entryType}/{entryId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> dismissTemporaryInboxEntry(
+            @PathVariable("entryType") String entryType,
+            @PathVariable("entryId") UUID entryId) {
+        messagingService.dismissTemporaryInboxEntry(entryType, entryId, getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/conversations/{id}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> hideConversationFromInbox(@PathVariable("id") UUID conversationId) {
+        messagingService.hideConversationFromInbox(conversationId, getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/conversations/{id}/archive")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> archiveConversation(@PathVariable("id") UUID conversationId) {
+        messagingService.archiveConversation(conversationId, getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/conversations/{id}/unarchive")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> unarchiveConversation(@PathVariable("id") UUID conversationId) {
+        messagingService.unarchiveConversation(conversationId, getCurrentUserId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/conversations/{id}/unread")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<Void> markConversationUnread(@PathVariable("id") UUID conversationId) {
+        messagingService.markAsUnread(conversationId, getCurrentUserId());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/invites/direct/{id}/accept")

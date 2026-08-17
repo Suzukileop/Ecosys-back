@@ -253,17 +253,19 @@ public final class SpecialtyTaxonomy {
             map.put(key(label), label);
             map.put(key(label).replaceAll("[\\s/]+", ""), label);
         }
-        put(map, "Developer", "development", "dev", "software developer", "software engineer", "programmer");
-        put(map, "Design", "designer", "graphic design", "graphic designer");
-        put(map, "Marketing", "marketer");
-        put(map, "Video editor", "video editing", "videographer", "video");
+        put(map, "Developer", "development", "dev", "software developer", "software engineer", "programmer",
+                "développement", "developpement", "développeur", "developpeur", "ingenieur informatique",
+                "ingénieur informatique");
+        put(map, "Design", "designer", "graphic design", "graphic designer", "graphiste");
+        put(map, "Marketing", "marketer", "marketing digital");
+        put(map, "Video editor", "video editing", "videographer", "video", "monteur", "montage video", "montage vidéo");
         put(map, "UI / UX", "ui/ux", "uiux", "ui ux", "ux", "ui", "user experience");
-        put(map, "Branding", "brand");
-        put(map, "Music", "musician");
-        put(map, "Writing", "writer", "copywriting");
-        put(map, "Illustration", "illustrator");
-        put(map, "Photography", "photographer", "photo");
-        put(map, "Data science", "data scientist", "datascience", "data scien");
+        put(map, "Branding", "brand", "identité visuelle", "identite visuelle");
+        put(map, "Music", "musician", "musique", "compositeur");
+        put(map, "Writing", "writer", "copywriting", "rédaction", "redaction", "rédacteur", "redacteur");
+        put(map, "Illustration", "illustrator", "illustrateur");
+        put(map, "Photography", "photographer", "photo", "photographe");
+        put(map, "Data science", "data scientist", "datascience", "data scien", "science des données", "science des donnees");
         put(map, "DevOps", "devops", "dev ops", "devoops", "devops engineer", "dev ops engineer");
         return Map.copyOf(map);
     }
