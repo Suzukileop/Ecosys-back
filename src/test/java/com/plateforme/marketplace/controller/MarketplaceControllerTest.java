@@ -111,7 +111,7 @@ class MarketplaceControllerTest {
                 null,
                 null);
 
-        when(marketplaceService.getCreators(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any()))
+        when(marketplaceService.getCreators(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any()))
                 .thenReturn(new PageImpl<>(List.of(row), PageRequest.of(0, 20), 1));
 
         mockMvc.perform(get("/api/marketplace/creators").accept(MediaType.APPLICATION_JSON))

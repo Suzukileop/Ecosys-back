@@ -63,7 +63,7 @@ public class CreatorProfileViewService {
             visit.setVisitCount(previous + 1);
             visitRepository.save(visit);
 
-            // Same person again: unique count unchanged, but notify on every visit (registered only).
+            // Same person again: unique count unchanged; notification cooldown handled centrally.
             long count = uniqueVisitorCount(creatorUserId, profile);
             syncDenormalizedCount(profile, count);
             notifyCreatorOfVisit(viewerUserId, creatorUserId);
@@ -159,7 +159,7 @@ public class CreatorProfileViewService {
     }
 
     /**
-     * Notify on every registered visit (including revisits by the same account).
+     * Notify registered viewers; {@link NotificationService} dedupes repeated visits within 5 minutes.
      * Anonymous visits stay in the unique-visitor counter / Visitors list only.
      */
     private void notifyCreatorOfVisit(UUID viewerUserId, UUID creatorUserId) {

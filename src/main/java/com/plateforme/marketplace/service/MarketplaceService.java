@@ -93,7 +93,7 @@ public class MarketplaceService {
     @Transactional(readOnly = true)
     public Page<CreatorProfileResponse> getCreators(String specialite, Boolean verified, Boolean available,
                                                     String nationality, Integer minYearsExperience,
-                                                    Double lat, Double lng, String sort,
+                                                    Double lat, Double lng, Double accuracyM, String sort,
                                                     UUID viewerUserId, Pageable pageable) {
         String specialitePrimary = resolveSpecialtyPrimary(specialite);
         String specialiteAlt = SpecialtyTaxonomy.alternateSearchTerm(specialite);
@@ -103,7 +103,7 @@ public class MarketplaceService {
         String nationalityFilter = ProfileExtensionsSupport.normalizeNationality(nationality);
         Integer yearsFilter = normalizeMinYearsExperience(minYearsExperience);
         boolean byDistance = wantsDistanceSort(sort, lat, lng);
-        boolean withDistance = hasViewerLocation(lat, lng);
+        boolean withDistance = canPublishDistance(lat, lng, accuracyM);
 
         Page<CreatorProfile> page = byDistance
                 ? creatorProfileRepository.findForMarketplaceByDistance(
@@ -121,14 +121,15 @@ public class MarketplaceService {
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
                 followedIds.contains(profile.getUser().getId()),
-                withDistance ? distanceKm(lat, lng, profile) : null));
+                withDistance ? publishableDistanceKm(lat, lng, accuracyM, profile) : null));
     }
 
     @Transactional(readOnly = true)
     public Page<CreatorProfileResponse> searchCreators(String keyword, Boolean verified, Boolean available,
                                                        String nationality, String specialite,
                                                        Integer minYearsExperience, Double lat, Double lng,
-                                                       String sort, UUID viewerUserId, Pageable pageable) {
+                                                       Double accuracyM, String sort, UUID viewerUserId,
+                                                       Pageable pageable) {
         String nationalityFilter = ProfileExtensionsSupport.normalizeNationality(nationality);
         String specialitePrimary = resolveSpecialtyPrimary(specialite);
         String specialiteAlt = SpecialtyTaxonomy.alternateSearchTerm(specialite);
@@ -137,7 +138,7 @@ public class MarketplaceService {
                 : CreatorSearchExpand.specialtySignalsPipe(specialitePrimary);
         Integer yearsFilter = normalizeMinYearsExperience(minYearsExperience);
         boolean byDistance = wantsDistanceSort(sort, lat, lng);
-        boolean withDistance = hasViewerLocation(lat, lng);
+        boolean withDistance = canPublishDistance(lat, lng, accuracyM);
         Page<CreatorProfile> page;
         if (keyword == null || keyword.isBlank()) {
             page = byDistance
@@ -177,7 +178,7 @@ public class MarketplaceService {
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
                 followedIds.contains(profile.getUser().getId()),
-                withDistance ? distanceKm(lat, lng, profile) : null));
+                withDistance ? publishableDistanceKm(lat, lng, accuracyM, profile) : null));
     }
 
     @Transactional(readOnly = true)
@@ -425,11 +426,48 @@ public class MarketplaceService {
         return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
     }
 
+    /**
+     * GPS / Wi-Fi / IP fixes often report 2–50 km accuracy. Publishing that as
+     * "Less than 1 km away" is misleading — only emit distance when the error
+     * bar is small enough to trust the displayed bucket.
+     */
+    static final double DISTANCE_MAX_ACCURACY_M = 500.0;
+
+    private static boolean canPublishDistance(Double lat, Double lng, Double accuracyM) {
+        if (!hasViewerLocation(lat, lng)) {
+            return false;
+        }
+        if (accuracyM == null || !Double.isFinite(accuracyM) || accuracyM <= 0) {
+            return false;
+        }
+        return accuracyM <= DISTANCE_MAX_ACCURACY_M;
+    }
+
     private static boolean wantsDistanceSort(String sort, Double lat, Double lng) {
         if (!hasViewerLocation(lat, lng)) {
             return false;
         }
         return sort != null && sort.equalsIgnoreCase("distance");
+    }
+
+    private static Double publishableDistanceKm(
+            Double viewerLat, Double viewerLng, Double accuracyM, CreatorProfile profile) {
+        if (!canPublishDistance(viewerLat, viewerLng, accuracyM)) {
+            return null;
+        }
+        Double km = distanceKm(viewerLat, viewerLng, profile);
+        if (km == null) {
+            return null;
+        }
+        double accuracyKm = accuracyM / 1000.0;
+        // Hide when the GPS error could flip the shown label (especially "< 1 km").
+        if (km < 1.0 && accuracyKm > 0.35) {
+            return null;
+        }
+        if (km >= 1.0 && accuracyKm > km) {
+            return null;
+        }
+        return km;
     }
 
     private static Double distanceKm(Double viewerLat, Double viewerLng, CreatorProfile profile) {
@@ -439,6 +477,10 @@ public class MarketplaceService {
         Double lat = profile.getLocationLat();
         Double lng = profile.getLocationLng();
         if (lat == null || lng == null) {
+            return null;
+        }
+        if (!Double.isFinite(lat) || !Double.isFinite(lng)
+                || (lat == 0.0 && lng == 0.0)) {
             return null;
         }
         double earthRadiusKm = 6371.0;

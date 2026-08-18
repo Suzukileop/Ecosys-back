@@ -18,6 +18,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +33,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationService {
+
+    /** Min delay before the same actor can trigger the same notification type again. */
+    private static final Duration ACTOR_NOTIFICATION_COOLDOWN = Duration.ofMinutes(5);
+
+    private static final Set<String> ACTOR_COOLDOWN_TYPES = Set.of(
+            "CREATOR_PROFILE_VISIT",
+            "CREATOR_NEW_FOLLOWER"
+    );
 
     private final NotificationRepository notificationRepository;
     private final UserRepository userRepository;
@@ -47,6 +57,17 @@ public class NotificationService {
     @Transactional
     public void createAndSend(UUID userId, String type, String title, String message,
                               String channelStr, UUID refId, UUID refSecondaryId) {
+        if (isWithinActorNotificationCooldown(userId, type, refSecondaryId)) {
+            log.debug(
+                    "Notification skipped ({} min cooldown) user={} type={} actor={}",
+                    ACTOR_NOTIFICATION_COOLDOWN.toMinutes(),
+                    userId,
+                    type,
+                    refSecondaryId
+            );
+            return;
+        }
+
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
                         "Utilisateur introuvable : " + userId));
@@ -76,6 +97,15 @@ public class NotificationService {
 
         log.debug("Notification créée pour user={} type={} channel={} refSecondary={}",
                 userId, type, channel, refSecondaryId);
+    }
+
+    private boolean isWithinActorNotificationCooldown(UUID recipientId, String type, UUID actorId) {
+        if (actorId == null || !ACTOR_COOLDOWN_TYPES.contains(type)) {
+            return false;
+        }
+        LocalDateTime since = LocalDateTime.now().minus(ACTOR_NOTIFICATION_COOLDOWN);
+        return notificationRepository.existsByUser_IdAndTypeAndRefSecondaryIdAndCreatedAtAfter(
+                recipientId, type, actorId, since);
     }
 
     /**

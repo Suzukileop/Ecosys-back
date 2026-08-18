@@ -180,17 +180,12 @@ public class OAuthService {
             return buildAuthRedirect(user);
         }
 
-        if (OAuthStateService.SIGNUP_STATE.equals(stateValue)) {
-            try {
-                String pendingCode = oauthStateService.storePendingProfile(objectMapper.writeValueAsString(profile));
-                return frontendUrl + "/oauth/complete?code=" + urlEncode(pendingCode);
-            } catch (Exception e) {
-                throw new BusinessException("OAUTH_PENDING_ERROR", "Unable to start registration");
-            }
+        try {
+            String pendingCode = oauthStateService.storePendingProfile(objectMapper.writeValueAsString(profile));
+            return frontendUrl + "/oauth/complete?code=" + urlEncode(pendingCode);
+        } catch (Exception e) {
+            throw new BusinessException("OAUTH_PENDING_ERROR", "Unable to start registration");
         }
-
-        User user = createOAuthUser(profile);
-        return buildAuthRedirect(user);
     }
 
     private User finalizeExistingUser(User user, OAuthProfilePayload profile) {

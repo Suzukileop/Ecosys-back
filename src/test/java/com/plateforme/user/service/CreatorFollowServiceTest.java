@@ -1,6 +1,7 @@
 package com.plateforme.user.service;
 
 import com.plateforme.shared.exception.BusinessException;
+import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.entity.CreatorFollow;
 import com.plateforme.user.entity.Role;
 import com.plateforme.user.entity.User;
@@ -40,6 +41,8 @@ class CreatorFollowServiceTest {
     private CreatorFollowRepository creatorFollowRepository;
     @Mock
     private UserRepository userRepository;
+    @Mock
+    private NotificationService notificationService;
 
     @InjectMocks
     private CreatorFollowService creatorFollowService;
@@ -77,6 +80,28 @@ class CreatorFollowServiceTest {
         creatorFollowService.follow(followerId, creatorId);
 
         verify(creatorFollowRepository).save(any(CreatorFollow.class));
+        verify(notificationService).createAndSend(
+                eq(creatorId),
+                eq("CREATOR_NEW_FOLLOWER"),
+                eq("New follower"),
+                eq("Client started following you."),
+                eq("PLATFORM"),
+                eq(creatorId),
+                eq(followerId)
+        );
+    }
+
+    @Test
+    @DisplayName("follow is idempotent and does not notify again")
+    void follow_idempotentSkipsNotification() {
+        when(userRepository.findByIdAndDeletedAtIsNull(creatorId)).thenReturn(Optional.of(creator));
+        when(userRepository.findByIdAndDeletedAtIsNull(followerId)).thenReturn(Optional.of(follower));
+        when(creatorFollowRepository.existsByFollower_IdAndCreator_Id(followerId, creatorId)).thenReturn(true);
+
+        creatorFollowService.follow(followerId, creatorId);
+
+        verify(creatorFollowRepository, never()).save(any());
+        verify(notificationService, never()).createAndSend(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test

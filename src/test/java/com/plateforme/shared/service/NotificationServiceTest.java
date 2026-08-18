@@ -21,6 +21,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -128,6 +129,49 @@ class NotificationServiceTest {
                 .isEqualTo("USER_NOT_FOUND");
 
         verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createAndSend - skips duplicate actor notification within 5 minutes")
+    void createAndSend_actorCooldown_skipsDuplicate() {
+        UUID actorId = UUID.randomUUID();
+        when(notificationRepository.existsByUser_IdAndTypeAndRefSecondaryIdAndCreatedAtAfter(
+                eq(userId), eq("CREATOR_PROFILE_VISIT"), eq(actorId), any(LocalDateTime.class)))
+                .thenReturn(true);
+
+        notificationService.createAndSend(
+                userId,
+                "CREATOR_PROFILE_VISIT",
+                "Profile visit",
+                "Someone visited your profile.",
+                "PLATFORM",
+                userId,
+                actorId);
+
+        verify(userRepository, never()).findByIdAndDeletedAtIsNull(any());
+        verify(notificationRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createAndSend - allows actor notification after cooldown window")
+    void createAndSend_actorCooldown_allowsWhenExpired() {
+        UUID actorId = UUID.randomUUID();
+        when(notificationRepository.existsByUser_IdAndTypeAndRefSecondaryIdAndCreatedAtAfter(
+                eq(userId), eq("CREATOR_PROFILE_VISIT"), eq(actorId), any(LocalDateTime.class)))
+                .thenReturn(false);
+        when(userRepository.findByIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
+        when(notificationRepository.save(any(Notification.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        notificationService.createAndSend(
+                userId,
+                "CREATOR_PROFILE_VISIT",
+                "Profile visit",
+                "Someone visited your profile.",
+                "PLATFORM",
+                userId,
+                actorId);
+
+        verify(notificationRepository).save(any(Notification.class));
     }
 
     @Test

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,4 +20,8 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     long countByUserIdAndIsReadFalse(UUID userId);
 
     List<Notification> findByUserId(UUID userId);
+
+    /** True when the same actor triggered the same notification type recently for this recipient. */
+    boolean existsByUser_IdAndTypeAndRefSecondaryIdAndCreatedAtAfter(
+            UUID userId, String type, UUID refSecondaryId, LocalDateTime createdAt);
 }

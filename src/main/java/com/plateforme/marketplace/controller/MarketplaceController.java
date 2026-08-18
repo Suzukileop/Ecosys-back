@@ -77,6 +77,7 @@ public class MarketplaceController {
             @RequestParam(required = false) Integer minYearsExperience,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) Double accuracyM,
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -86,7 +87,7 @@ public class MarketplaceController {
         return ResponseEntity.ok(PagedResponse.fromPage(
                 marketplaceService.getCreators(
                         specialite, verified, available, nationality, minYearsExperience,
-                        lat, lng, sort, viewerUserId, pageable)));
+                        lat, lng, accuracyM, sort, viewerUserId, pageable)));
     }
 
     @Operation(summary = "Rechercher des créateurs",
@@ -104,6 +105,7 @@ public class MarketplaceController {
             @RequestParam(required = false) Integer minYearsExperience,
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng,
+            @RequestParam(required = false) Double accuracyM,
             @RequestParam(required = false) String sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
@@ -113,7 +115,7 @@ public class MarketplaceController {
         return ResponseEntity.ok(PagedResponse.fromPage(
                 marketplaceService.searchCreators(
                         q, verified, available, nationality, specialite, minYearsExperience,
-                        lat, lng, sort, viewerUserId, pageable)));
+                        lat, lng, accuracyM, sort, viewerUserId, pageable)));
     }
 
     @Operation(summary = "Autocomplete specialties already used on profiles")

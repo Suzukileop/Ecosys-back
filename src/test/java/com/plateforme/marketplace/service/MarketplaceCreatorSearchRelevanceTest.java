@@ -77,7 +77,7 @@ class MarketplaceCreatorSearchRelevanceTest {
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.searchCreators(
-                "dev", true, null, null, null, null, null, null, null, null, pageable);
+                "dev", true, null, null, null, null, null, null, null, null, null, pageable);
 
         ArgumentCaptor<String> qCap = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> qCanonCap = ArgumentCaptor.forClass(String.class);
@@ -110,7 +110,7 @@ class MarketplaceCreatorSearchRelevanceTest {
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.getCreators(
-                "dev", null, null, null, null, null, null, null, null, pageable);
+                "dev", null, null, null, null, null, null, null, null, null, pageable);
 
         ArgumentCaptor<String> primaryCap = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> altCap = ArgumentCaptor.forClass(String.class);
@@ -139,7 +139,7 @@ class MarketplaceCreatorSearchRelevanceTest {
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.searchCreators(
-                "  ", true, null, null, "Data science", null, null, null, null, null, pageable);
+                "  ", true, null, null, "Data science", null, null, null, null, null, null, pageable);
 
         verify(creatorProfileRepository).findForMarketplace(
                 eq("Data science"),

@@ -1,6 +1,7 @@
 package com.plateforme.user.service;
 
 import com.plateforme.shared.exception.BusinessException;
+import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.dto.CreatorFollowStatsDto;
 import com.plateforme.user.dto.CreatorFollowItemDto;
 import com.plateforme.user.entity.CreatorFollow;
@@ -29,6 +30,7 @@ public class CreatorFollowService {
 
     private final CreatorFollowRepository creatorFollowRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public void follow(UUID followerId, UUID creatorId) {
@@ -48,6 +50,23 @@ public class CreatorFollowService {
         follow.setFollower(follower);
         follow.setCreator(creator);
         creatorFollowRepository.save(follow);
+        notifyCreatorOfNewFollower(follower, creator);
+    }
+
+    private void notifyCreatorOfNewFollower(User follower, User creator) {
+        String followerName = follower.getFullName() != null && !follower.getFullName().isBlank()
+                ? follower.getFullName().trim()
+                : "A user";
+
+        notificationService.createAndSend(
+                creator.getId(),
+                "CREATOR_NEW_FOLLOWER",
+                "New follower",
+                followerName + " started following you.",
+                "PLATFORM",
+                creator.getId(),
+                follower.getId()
+        );
     }
 
     @Transactional
