@@ -3,6 +3,8 @@ package com.plateforme.user.service;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.util.OwnedMediaUrlValidator;
 import com.plateforme.user.dto.FaqItemDto;
+import com.plateforme.user.dto.ProfileAboutUsDto;
+import com.plateforme.user.dto.ProfileAboutUsFounderDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -46,6 +48,14 @@ public final class ProfileExtensionsSupport {
     static final int MAX_TEAM_SOCIAL_LABEL = 80;
     static final int MAX_GALLERY_ITEMS = 24;
     static final int MAX_GALLERY_TITLE = 120;
+    static final int MAX_ABOUT_US_TITLE = 150;
+    static final int MAX_ABOUT_US_DESC = 4000;
+    static final int MAX_ABOUT_US_TASKS = 12;
+    static final int MAX_ABOUT_US_TASK = 200;
+    static final int MAX_ABOUT_US_IMAGES = 2;
+    static final int MAX_ABOUT_US_QUOTE = 500;
+    static final int MAX_ABOUT_US_FOUNDER_NAME = 100;
+    static final int MAX_ABOUT_US_FOUNDER_FUNCTION = 120;
     static final int MIN_SAMPLES_FOR_LABEL = 1;
     static final int MAX_CONTACT_ENTRIES = 8;
     static final int MAX_CONTACT_ADDRESS = 300;
@@ -293,6 +303,36 @@ public final class ProfileExtensionsSupport {
         return List.copyOf(normalized);
     }
 
+    public static ProfileAboutUsDto normalizeAboutUs(ProfileAboutUsDto raw, UUID userId) {
+        if (raw == null) {
+            return null;
+        }
+        String title = blankToNull(raw.title());
+        if (title != null && title.length() > MAX_ABOUT_US_TITLE) {
+            throw new BusinessException("ABOUT_US_TITLE_TOO_LONG",
+                    "About us title must be at most " + MAX_ABOUT_US_TITLE + " characters.");
+        }
+        String description = blankToNull(raw.description());
+        if (description != null && description.length() > MAX_ABOUT_US_DESC) {
+            throw new BusinessException("ABOUT_US_DESC_TOO_LONG",
+                    "About us description must be at most " + MAX_ABOUT_US_DESC + " characters.");
+        }
+        String quote = blankToNull(raw.quote());
+        if (quote != null && quote.length() > MAX_ABOUT_US_QUOTE) {
+            throw new BusinessException("ABOUT_US_QUOTE_TOO_LONG",
+                    "About us quote must be at most " + MAX_ABOUT_US_QUOTE + " characters.");
+        }
+        List<String> tasks = normalizeAboutUsTasks(raw.tasks());
+        List<String> imageUrls = normalizeAboutUsImages(raw.imageUrls(), userId);
+        ProfileAboutUsFounderDto founder = normalizeAboutUsFounder(raw.founder(), userId);
+
+        if (title == null && description == null && tasks.isEmpty() && imageUrls.isEmpty()
+                && quote == null && founder == null) {
+            return null;
+        }
+        return new ProfileAboutUsDto(title, description, tasks, imageUrls, quote, founder);
+    }
+
     public static List<ProfileGalleryItemDto> normalizeGalleryItems(
             List<ProfileGalleryItemDto> raw,
             UUID userId
@@ -421,6 +461,76 @@ public final class ProfileExtensionsSupport {
             return fromLegacy;
         }
         return stored != null ? List.copyOf(stored) : List.of();
+    }
+
+    private static List<String> normalizeAboutUsTasks(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String task : raw) {
+            String value = blankToNull(task);
+            if (value == null) {
+                continue;
+            }
+            if (value.length() > MAX_ABOUT_US_TASK) {
+                throw new BusinessException("ABOUT_US_TASK_TOO_LONG",
+                        "About us tasks must be at most " + MAX_ABOUT_US_TASK + " characters.");
+            }
+            normalized.add(value);
+            if (normalized.size() > MAX_ABOUT_US_TASKS) {
+                throw new BusinessException("TOO_MANY_ABOUT_US_TASKS",
+                        "About us can have at most " + MAX_ABOUT_US_TASKS + " tasks.");
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private static List<String> normalizeAboutUsImages(List<String> raw, UUID userId) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String url : raw) {
+            String value = blankToNull(url);
+            if (value == null) {
+                continue;
+            }
+            OwnedMediaUrlValidator.validate(value, userId);
+            normalized.add(value);
+            if (normalized.size() > MAX_ABOUT_US_IMAGES) {
+                throw new BusinessException("TOO_MANY_ABOUT_US_IMAGES",
+                        "About us can have at most " + MAX_ABOUT_US_IMAGES + " images.");
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    private static ProfileAboutUsFounderDto normalizeAboutUsFounder(
+            ProfileAboutUsFounderDto raw,
+            UUID userId
+    ) {
+        if (raw == null) {
+            return null;
+        }
+        String logoUrl = blankToNull(raw.logoUrl());
+        if (logoUrl != null) {
+            OwnedMediaUrlValidator.validate(logoUrl, userId);
+        }
+        String name = blankToNull(raw.name());
+        if (name != null && name.length() > MAX_ABOUT_US_FOUNDER_NAME) {
+            throw new BusinessException("ABOUT_US_FOUNDER_NAME_TOO_LONG",
+                    "Founder name must be at most " + MAX_ABOUT_US_FOUNDER_NAME + " characters.");
+        }
+        String function = blankToNull(raw.function());
+        if (function != null && function.length() > MAX_ABOUT_US_FOUNDER_FUNCTION) {
+            throw new BusinessException("ABOUT_US_FOUNDER_FUNCTION_TOO_LONG",
+                    "Founder function must be at most " + MAX_ABOUT_US_FOUNDER_FUNCTION + " characters.");
+        }
+        if (logoUrl == null && name == null && function == null) {
+            return null;
+        }
+        return new ProfileAboutUsFounderDto(logoUrl, name, function);
     }
 
     private static List<ProfileTeamSocialLinkDto> normalizeTeamSocialLinks(

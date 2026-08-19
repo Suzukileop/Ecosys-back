@@ -2,6 +2,7 @@ package com.plateforme.user.entity;
 
 import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.FaqItemDto;
+import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -115,6 +116,10 @@ public class CreatorProfile {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "gallery_items", columnDefinition = "jsonb", nullable = false)
     private List<ProfileGalleryItemDto> galleryItems = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "about_us", columnDefinition = "jsonb")
+    private ProfileAboutUsDto aboutUs;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "profile_links", columnDefinition = "jsonb", nullable = false)

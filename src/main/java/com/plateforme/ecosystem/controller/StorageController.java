@@ -75,7 +75,8 @@ public class StorageController {
         FileSystemResource resource = new FileSystemResource(target);
         ResponseEntity.BodyBuilder response = ResponseEntity.ok()
                 .contentType(mediaType)
-                .contentLength(resource.contentLength());
+                .contentLength(resource.contentLength())
+                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=31536000, immutable");
         String disposition = request.getParameter("disposition");
         String filename = request.getParameter("filename");
         if ("attachment".equalsIgnoreCase(disposition) && filename != null && !filename.isBlank()) {

@@ -141,6 +141,9 @@ public record UpdateCreatorProfileDto(
         @Size(max = 24)
         List<ProfileGalleryItemDto> galleryItems,
 
+        @Valid
+        ProfileAboutUsDto aboutUs,
+
         @Pattern(regexp = "WITHIN_1_HOUR|FEW_HOURS|WITHIN_DAY|WITHIN_2_3_DAYS|")
         @Size(max = 40)
         String typicalResponseTime

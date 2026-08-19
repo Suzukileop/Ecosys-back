@@ -99,6 +99,7 @@ class MarketplaceControllerTest {
                 List.of(),
                 List.of(),
                 List.of(),
+                null,
                 List.of(),
                 null,
                 null,

@@ -151,6 +151,9 @@ public class CreatorProfileService {
             profile.setGalleryItems(new ArrayList<>(
                     ProfileExtensionsSupport.normalizeGalleryItems(dto.galleryItems(), userId)));
         }
+        if (dto.aboutUs() != null) {
+            profile.setAboutUs(ProfileExtensionsSupport.normalizeAboutUs(dto.aboutUs(), userId));
+        }
 
         applyProfileLinks(profile, dto);
         applyLocation(profile, dto);
@@ -387,6 +390,7 @@ public class CreatorProfileService {
                 safeFaq(p.getFaqItems()),
                 safeTeamMembers(p.getTeamMembers()),
                 safeGalleryItems(p.getGalleryItems()),
+                p.getAboutUs(),
                 links,
                 user.getCreatedAt(),
                 responseLabel,

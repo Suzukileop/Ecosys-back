@@ -57,6 +57,7 @@ public record CreatorProfileDto(
         List<FaqItemDto> faqItems,
         List<ProfileTeamMemberDto> teamMembers,
         List<ProfileGalleryItemDto> galleryItems,
+        ProfileAboutUsDto aboutUs,
         List<ProfileLinkDto> profileLinks,
         LocalDateTime memberSince,
         String responseTimeLabel,

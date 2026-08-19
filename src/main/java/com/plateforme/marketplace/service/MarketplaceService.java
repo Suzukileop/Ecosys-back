@@ -363,6 +363,7 @@ public class MarketplaceService {
                 contact.faqItems(),
                 safeTeamMembers(profile.getTeamMembers()),
                 safeGalleryItems(profile.getGalleryItems()),
+                profile.getAboutUs(),
                 contact.profileLinks(),
                 user.getCreatedAt(),
                 contact.responseTimeLabel(),

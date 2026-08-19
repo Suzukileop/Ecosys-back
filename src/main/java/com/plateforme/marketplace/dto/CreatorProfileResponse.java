@@ -1,6 +1,7 @@
 package com.plateforme.marketplace.dto;
 
 import com.plateforme.user.dto.FaqItemDto;
+import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
@@ -63,6 +64,7 @@ public record CreatorProfileResponse(
         List<FaqItemDto> faqItems,
         List<ProfileTeamMemberDto> teamMembers,
         List<ProfileGalleryItemDto> galleryItems,
+        ProfileAboutUsDto aboutUs,
         List<ProfileLinkDto> profileLinks,
         LocalDateTime memberSince,
         String responseTimeLabel,

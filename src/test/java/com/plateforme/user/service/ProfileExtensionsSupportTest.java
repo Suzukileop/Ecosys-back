@@ -2,6 +2,8 @@ package com.plateforme.user.service;
 
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.FaqItemDto;
+import com.plateforme.user.dto.ProfileAboutUsDto;
+import com.plateforme.user.dto.ProfileAboutUsFounderDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -116,6 +118,73 @@ class ProfileExtensionsSupportTest {
                 null, 0, "Name", "Responsibility", null, Collections.nCopies(7, link));
         assertThrows(BusinessException.class, () ->
                 ProfileExtensionsSupport.normalizeTeamMembers(List.of(tooManyLinks), userId));
+    }
+
+    @Test
+    @DisplayName("normalizeAboutUs returns null for empty payload")
+    void normalizeAboutUs_emptyReturnsNull() {
+        UUID userId = UUID.randomUUID();
+        assertNull(ProfileExtensionsSupport.normalizeAboutUs(null, userId));
+        assertNull(ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto(null, null, null, null, null, null), userId));
+        assertNull(ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto("  ", " ", List.of("  "), List.of(), "   ",
+                        new ProfileAboutUsFounderDto("  ", " ", " ")),
+                userId));
+    }
+
+    @Test
+    @DisplayName("normalizeAboutUs trims fields and keeps optional lists")
+    void normalizeAboutUs_trims() {
+        UUID userId = UUID.randomUUID();
+        String logo = "https://cdn.example.com/content/public/" + userId + "/logo.png";
+        String image = "https://cdn.example.com/content/public/" + userId + "/about.jpg";
+        ProfileAboutUsDto result = ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto(
+                        "  Studio  ",
+                        "  Description  ",
+                        List.of("  Task one  ", " ", "Task two"),
+                        List.of("  " + image + "  "),
+                        "  Quote  ",
+                        new ProfileAboutUsFounderDto("  " + logo + "  ", "  Ada  ", "  Founder  ")),
+                userId);
+
+        assertNotNull(result);
+        assertEquals("Studio", result.title());
+        assertEquals("Description", result.description());
+        assertEquals(List.of("Task one", "Task two"), result.tasks());
+        assertEquals(List.of(image), result.imageUrls());
+        assertEquals("Quote", result.quote());
+        assertEquals(logo, result.founder().logoUrl());
+        assertEquals("Ada", result.founder().name());
+        assertEquals("Founder", result.founder().function());
+    }
+
+    @Test
+    @DisplayName("normalizeAboutUs enforces max 2 images and 12 tasks")
+    void normalizeAboutUs_limits() {
+        UUID userId = UUID.randomUUID();
+        String image1 = "https://cdn.example.com/content/public/" + userId + "/a.jpg";
+        String image2 = "https://cdn.example.com/content/public/" + userId + "/b.jpg";
+        String image3 = "https://cdn.example.com/content/public/" + userId + "/c.jpg";
+
+        ProfileAboutUsDto twoImages = ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto("Title", null, null, List.of(image1, image2), null, null),
+                userId);
+        assertEquals(List.of(image1, image2), twoImages.imageUrls());
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto("Title", null, null, List.of(image1, image2, image3), null, null),
+                userId));
+
+        List<String> twelveTasks = Collections.nCopies(12, "Task");
+        ProfileAboutUsDto twelve = ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto(null, null, twelveTasks, null, null, null), userId);
+        assertEquals(12, twelve.tasks().size());
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutUs(
+                new ProfileAboutUsDto(null, null, Collections.nCopies(13, "Task"), null, null, null),
+                userId));
     }
 
     @Test

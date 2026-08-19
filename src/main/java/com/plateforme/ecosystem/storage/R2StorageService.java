@@ -61,6 +61,7 @@ public class R2StorageService implements StorageService {
                 .key(objectKey)
                 .contentType(ct)
                 .contentLength(contentLength)
+                .cacheControl("public, max-age=31536000, immutable")
                 .build();
 
         s3Client.putObject(req, RequestBody.fromInputStream(inputStream, contentLength));
