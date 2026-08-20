@@ -53,7 +53,13 @@ public class LocalDevStorageService implements StorageService {
     public String uploadFile(MultipartFile file, String objectKey) throws IOException {
         validateMultipart(file, objectKey);
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
-        return uploadPublicFile(objectKey, file.getInputStream(), file.getSize(), contentType);
+        byte[] payload = file.getBytes();
+        var normalized = DisplayImageNormalizer.maybeNormalize(payload, contentType);
+        if (normalized.isPresent()) {
+            payload = normalized.get().bytes();
+            contentType = normalized.get().contentType();
+        }
+        return uploadPublicFile(objectKey, new java.io.ByteArrayInputStream(payload), payload.length, contentType);
     }
 
     @Override
