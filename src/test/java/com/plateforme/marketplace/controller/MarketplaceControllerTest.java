@@ -52,6 +52,7 @@ class MarketplaceControllerTest {
         CreatorProfileResponse row = new CreatorProfileResponse(
                 uid,
                 "Name",
+                "name",
                 null,
                 null,
                 "bio",
@@ -94,6 +95,7 @@ class MarketplaceControllerTest {
                 List.of(),
                 0L,
                 null,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),

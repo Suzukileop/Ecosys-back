@@ -8,6 +8,7 @@ import com.plateforme.user.dto.ProfileAboutUsFounderDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileServiceDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import com.plateforme.user.dto.ProfileTeamSocialLinkDto;
@@ -48,6 +49,14 @@ public final class ProfileExtensionsSupport {
     static final int MAX_TEAM_SOCIAL_LABEL = 80;
     static final int MAX_GALLERY_ITEMS = 24;
     static final int MAX_GALLERY_TITLE = 120;
+    static final int MAX_PORTFOLIO_WORKS = 6;
+    static final int MAX_PORTFOLIO_ROLE = 80;
+    static final int MAX_PORTFOLIO_CATEGORY = 80;
+    static final int MAX_PORTFOLIO_TITLE = 120;
+    static final int MAX_PORTFOLIO_DESC = 2000;
+    static final int MAX_PORTFOLIO_STACK = 12;
+    static final int MAX_PORTFOLIO_STACK_TAG = 40;
+    static final int MAX_PORTFOLIO_LINK = 500;
     static final int MAX_ABOUT_US_TITLE = 150;
     static final int MAX_ABOUT_US_DESC = 4000;
     static final int MAX_ABOUT_US_TASKS = 12;
@@ -365,6 +374,66 @@ public final class ProfileExtensionsSupport {
             UUID id = item.id() != null ? item.id() : UUID.randomUUID();
             int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
             normalized.add(new ProfileGalleryItemDto(id, sortOrder, title, mediaUrl, mediaType));
+        }
+        normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
+        return List.copyOf(normalized);
+    }
+
+    public static List<ProfilePortfolioWorkDto> normalizePortfolioWorks(
+            List<ProfilePortfolioWorkDto> raw,
+            UUID userId
+    ) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        if (raw.size() > MAX_PORTFOLIO_WORKS) {
+            throw new BusinessException("TOO_MANY_PORTFOLIO_WORKS",
+                    "A maximum of " + MAX_PORTFOLIO_WORKS + " portfolio works is allowed.");
+        }
+        List<ProfilePortfolioWorkDto> normalized = new ArrayList<>();
+        for (int i = 0; i < raw.size(); i++) {
+            ProfilePortfolioWorkDto item = raw.get(i);
+            if (item == null) {
+                continue;
+            }
+            String title = requireText(
+                    item.title(), "PORTFOLIO_TITLE_REQUIRED", "Each portfolio work needs a title.");
+            if (title.length() > MAX_PORTFOLIO_TITLE) {
+                throw new BusinessException("PORTFOLIO_TITLE_TOO_LONG",
+                        "Portfolio titles must be at most " + MAX_PORTFOLIO_TITLE + " characters.");
+            }
+            String role = blankToNull(item.role());
+            if (role != null && role.length() > MAX_PORTFOLIO_ROLE) {
+                throw new BusinessException("PORTFOLIO_ROLE_TOO_LONG",
+                        "Portfolio roles must be at most " + MAX_PORTFOLIO_ROLE + " characters.");
+            }
+            String category = blankToNull(item.category());
+            if (category != null && category.length() > MAX_PORTFOLIO_CATEGORY) {
+                throw new BusinessException("PORTFOLIO_CATEGORY_TOO_LONG",
+                        "Portfolio categories must be at most " + MAX_PORTFOLIO_CATEGORY + " characters.");
+            }
+            String description = blankToNull(item.description());
+            if (description != null && description.length() > MAX_PORTFOLIO_DESC) {
+                throw new BusinessException("PORTFOLIO_DESC_TOO_LONG",
+                        "Portfolio descriptions must be at most " + MAX_PORTFOLIO_DESC + " characters.");
+            }
+            String imageUrl = requireText(
+                    item.imageUrl(), "PORTFOLIO_IMAGE_URL_REQUIRED",
+                    "Each portfolio work needs an image URL.");
+            validatePortfolioImageUrl(imageUrl, userId);
+            List<String> stack = normalizePortfolioStack(item.stack());
+            String link = blankToNull(item.link());
+            if (link != null) {
+                if (link.length() > MAX_PORTFOLIO_LINK) {
+                    throw new BusinessException("PORTFOLIO_LINK_TOO_LONG",
+                            "Portfolio links must be at most " + MAX_PORTFOLIO_LINK + " characters.");
+                }
+                validateSafeUrl(link);
+            }
+            UUID id = item.id() != null ? item.id() : UUID.randomUUID();
+            int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
+            normalized.add(new ProfilePortfolioWorkDto(
+                    id, sortOrder, role, category, title, description, stack, imageUrl, link));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);
@@ -944,6 +1013,50 @@ public final class ProfileExtensionsSupport {
             }
             throw ex;
         }
+    }
+
+    private static void validatePortfolioImageUrl(String imageUrl, UUID userId) {
+        if (!imageUrl.startsWith("http://") && !imageUrl.startsWith("https://")) {
+            throw new BusinessException(
+                    "PORTFOLIO_IMAGE_URL_INVALID", "Image URL must use http or https.");
+        }
+        try {
+            OwnedMediaUrlValidator.validate(imageUrl, userId);
+        } catch (BusinessException ex) {
+            // Portfolio also accepts external http(s) URLs pasted by the creator.
+            if ("BLOCK_MEDIA_URL_FORBIDDEN".equals(ex.getCode())) {
+                return;
+            }
+            throw ex;
+        }
+    }
+
+    private static List<String> normalizePortfolioStack(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        Set<String> seen = new LinkedHashSet<>();
+        List<String> tags = new ArrayList<>();
+        for (String item : raw) {
+            String value = blankToNull(item);
+            if (value == null) {
+                continue;
+            }
+            if (value.length() > MAX_PORTFOLIO_STACK_TAG) {
+                throw new BusinessException("PORTFOLIO_STACK_TAG_TOO_LONG",
+                        "Each stack tag must be at most " + MAX_PORTFOLIO_STACK_TAG + " characters.");
+            }
+            String key = value.toLowerCase(Locale.ROOT);
+            if (!seen.add(key)) {
+                continue;
+            }
+            tags.add(value);
+            if (tags.size() > MAX_PORTFOLIO_STACK) {
+                throw new BusinessException("TOO_MANY_PORTFOLIO_STACK_TAGS",
+                        "Each portfolio work can have at most " + MAX_PORTFOLIO_STACK + " stack tags.");
+            }
+        }
+        return List.copyOf(tags);
     }
 
     private static String requireText(String value, String code, String message) {

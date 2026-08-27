@@ -14,6 +14,7 @@ import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
@@ -23,6 +24,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorFollowRepository;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.CreatorProfileVisitRepository;
+import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorFollowService;
 import com.plateforme.user.service.CreatorPortfolioService;
 import com.plateforme.user.service.CreatorSearchExpand;
@@ -89,6 +91,7 @@ public class MarketplaceService {
     private final CreatorFollowService creatorFollowService;
     private final CreatorFollowRepository creatorFollowRepository;
     private final PublicMediaUrlResolver publicMediaUrlResolver;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public Page<CreatorProfileResponse> getCreators(String specialite, Boolean verified, Boolean available,
@@ -223,6 +226,26 @@ public class MarketplaceService {
         return List.copyOf(values);
     }
 
+    /**
+     * Resolve a public creator path segment: UUID or case-sensitive public username.
+     */
+    @Transactional(readOnly = true)
+    public UUID resolveCreatorUserId(String idOrUsername) {
+        if (idOrUsername == null || idOrUsername.isBlank()) {
+            throw new BusinessException("CREATOR_NOT_FOUND", "Créateur introuvable");
+        }
+        String raw = idOrUsername.trim();
+        try {
+            return UUID.fromString(raw);
+        } catch (IllegalArgumentException ignored) {
+            // fall through to username lookup
+        }
+        return userRepository.findByUsernameAndDeletedAtIsNull(raw)
+                .map(User::getId)
+                .orElseThrow(() -> new BusinessException("CREATOR_NOT_FOUND",
+                        "Créateur introuvable : " + raw));
+    }
+
     @Transactional(readOnly = true)
     public CreatorProfileResponse getCreatorPublicProfile(UUID userId, UUID viewerUserId) {
         CreatorProfile profile = creatorProfileRepository.findByUserIdAndUserDeletedAtIsNull(userId)
@@ -230,11 +253,15 @@ public class MarketplaceService {
                         "Créateur introuvable : " + userId));
 
         User user = profile.getUser();
-        long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
+        long curatedCount = creatorPortfolioService.countPublicCuratedPosts(userId);
         long contentCount = contentPostRepository.countByCreator_Id(userId);
         long productCount = productRepository.countByCreator_IdAndIsPublishedTrue(userId);
 
-        List<ContentPostResponse> portfolioPosts = creatorPortfolioService.getPublicCuratedPosts(userId);
+        List<ProfilePortfolioWorkDto> portfolioWorks = safePortfolioWorks(profile.getPortfolioWorks());
+        long portfolioCount = !portfolioWorks.isEmpty() ? portfolioWorks.size() : curatedCount;
+        List<ContentPostResponse> portfolioPosts = !portfolioWorks.isEmpty()
+                ? mapPortfolioWorksToPosts(portfolioWorks, portfolioCount)
+                : creatorPortfolioService.getPublicCuratedPosts(userId);
 
         boolean authenticated = viewerUserId != null;
         ResolvedPublicContact contact = resolvePublicContact(profile, user, authenticated);
@@ -254,6 +281,7 @@ public class MarketplaceService {
                 followerCount,
                 isFollowing,
                 portfolioPosts,
+                portfolioWorks,
                 null);
     }
 
@@ -274,7 +302,9 @@ public class MarketplaceService {
             Double distanceKm) {
         User user = profile.getUser();
         UUID userId = user.getId();
-        long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
+        List<ProfilePortfolioWorkDto> portfolioWorks = safePortfolioWorks(profile.getPortfolioWorks());
+        long curatedCount = creatorPortfolioService.countPublicCuratedPosts(userId);
+        long portfolioCount = !portfolioWorks.isEmpty() ? portfolioWorks.size() : curatedCount;
         long contentCount = contentPostRepository.countByCreator_Id(userId);
         long productCount = productRepository.countByCreator_IdAndIsPublishedTrue(userId);
 
@@ -292,6 +322,7 @@ public class MarketplaceService {
                 followerCount,
                 isFollowing,
                 List.of(),
+                portfolioWorks,
                 distanceKm);
     }
 
@@ -306,14 +337,19 @@ public class MarketplaceService {
             long followerCount,
             boolean isFollowing,
             List<ContentPostResponse> portfolioPosts,
+            List<ProfilePortfolioWorkDto> portfolioWorks,
             Double distanceKm) {
         long serviceCount = ProfileExtensionsSupport.countActiveServices(profile.getProfileServices());
         List<String> specialties = SpecialtyTaxonomy.normalizeSpecialties(
                 profile.getSpecialties(), profile.getSpecialite());
         String bio = ProfileBioSupport.normalize(profile.getBio());
+        List<ProfilePortfolioWorkDto> works = portfolioWorks != null
+                ? portfolioWorks
+                : safePortfolioWorks(profile.getPortfolioWorks());
         return new CreatorProfileResponse(
                 user.getId(),
                 user.getFullName(),
+                user.getPublicUsername(),
                 publicMediaUrlResolver.resolveAvatarUrl(user.getAvatarUrl()),
                 contact.phone(),
                 bio,
@@ -363,6 +399,7 @@ public class MarketplaceService {
                 contact.faqItems(),
                 safeTeamMembers(profile.getTeamMembers()),
                 safeGalleryItems(profile.getGalleryItems()),
+                works,
                 profile.getAboutUs(),
                 contact.profileLinks(),
                 user.getCreatedAt(),
@@ -500,6 +537,48 @@ public class MarketplaceService {
 
     private static List<ProfileGalleryItemDto> safeGalleryItems(List<ProfileGalleryItemDto> galleryItems) {
         return galleryItems != null ? galleryItems : List.of();
+    }
+
+    private static List<ProfilePortfolioWorkDto> safePortfolioWorks(List<ProfilePortfolioWorkDto> portfolioWorks) {
+        return portfolioWorks != null ? List.copyOf(portfolioWorks) : List.of();
+    }
+
+    private static List<ContentPostResponse> mapPortfolioWorksToPosts(
+            List<ProfilePortfolioWorkDto> works,
+            long portfolioCount) {
+        List<ContentPostResponse> posts = new ArrayList<>();
+        for (ProfilePortfolioWorkDto work : works) {
+            if (work == null) {
+                continue;
+            }
+            posts.add(new ContentPostResponse(
+                    work.id(),
+                    work.title(),
+                    work.category() != null && !work.category().isBlank()
+                            ? work.category()
+                            : work.role(),
+                    work.imageUrl(),
+                    "FILE",
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    work.description(),
+                    work.link(),
+                    work.stack() != null ? work.stack() : List.of(),
+                    List.of(),
+                    true,
+                    false,
+                    false,
+                    null,
+                    0,
+                    0,
+                    portfolioCount,
+                    null,
+                    null
+            ));
+        }
+        return List.copyOf(posts);
     }
 
     private ResolvedPublicContact resolvePublicContact(CreatorProfile profile, User user, boolean authenticated) {

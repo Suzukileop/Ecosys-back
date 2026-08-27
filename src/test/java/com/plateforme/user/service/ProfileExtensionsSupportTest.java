@@ -7,6 +7,7 @@ import com.plateforme.user.dto.ProfileAboutUsFounderDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileServiceDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import com.plateforme.user.dto.ProfileTeamSocialLinkDto;
@@ -249,6 +250,83 @@ class ProfileExtensionsSupportTest {
 
         assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeGalleryItems(
                 Collections.nCopies(25, item), userId));
+    }
+
+    @Test
+    @DisplayName("normalizePortfolioWorks validates fields, stack, link and ordering")
+    void normalizePortfolioWorks_happyPath() {
+        UUID userId = UUID.randomUUID();
+        String imageUrl = "https://cdn.example.com/content/public/" + userId + "/work.jpg";
+        ProfilePortfolioWorkDto second = new ProfilePortfolioWorkDto(
+                null,
+                2,
+                " Branding ",
+                " Business ",
+                " Campaign ",
+                "  A description  ",
+                List.of(" React ", "react", " Tailwind ", " "),
+                "  " + imageUrl + "  ",
+                " https://example.com/case "
+        );
+        ProfilePortfolioWorkDto first = new ProfilePortfolioWorkDto(
+                UUID.randomUUID(),
+                1,
+                "UI",
+                "Lifestyle",
+                "Landing",
+                null,
+                List.of(),
+                imageUrl,
+                "  "
+        );
+
+        List<ProfilePortfolioWorkDto> result =
+                ProfileExtensionsSupport.normalizePortfolioWorks(List.of(second, first), userId);
+
+        assertEquals(2, result.size());
+        assertEquals("Landing", result.getFirst().title());
+        assertEquals("UI", result.getFirst().role());
+        assertEquals("Lifestyle", result.getFirst().category());
+        assertNull(result.getFirst().link());
+        assertEquals("Campaign", result.get(1).title());
+        assertEquals("Branding", result.get(1).role());
+        assertEquals("Business", result.get(1).category());
+        assertEquals("A description", result.get(1).description());
+        assertEquals(List.of("React", "Tailwind"), result.get(1).stack());
+        assertEquals(imageUrl, result.get(1).imageUrl());
+        assertEquals("https://example.com/case", result.get(1).link());
+        assertNotNull(result.get(1).id());
+    }
+
+    @Test
+    @DisplayName("normalizePortfolioWorks requires title and imageUrl")
+    void normalizePortfolioWorks_requiredFields() {
+        UUID userId = UUID.randomUUID();
+        String imageUrl = "https://cdn.example.com/content/public/" + userId + "/work.jpg";
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizePortfolioWorks(
+                List.of(new ProfilePortfolioWorkDto(null, 0, null, null, "  ", null, null, imageUrl, null)),
+                userId));
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizePortfolioWorks(
+                List.of(new ProfilePortfolioWorkDto(null, 0, null, null, "Title", null, null, "  ", null)),
+                userId));
+    }
+
+    @Test
+    @DisplayName("normalizePortfolioWorks enforces max 6 items and rejects unsafe links")
+    void normalizePortfolioWorks_limitsAndLink() {
+        UUID userId = UUID.randomUUID();
+        String imageUrl = "https://cdn.example.com/content/public/" + userId + "/work.jpg";
+        ProfilePortfolioWorkDto item = new ProfilePortfolioWorkDto(
+                null, 0, "Role", "Business", "Title", null, List.of(), imageUrl, null);
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizePortfolioWorks(
+                Collections.nCopies(7, item), userId));
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizePortfolioWorks(
+                List.of(new ProfilePortfolioWorkDto(
+                        null, 0, null, null, "Title", null, null, imageUrl, "javascript:alert(1)")),
+                userId));
     }
 
     @Test

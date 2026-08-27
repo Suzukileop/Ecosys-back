@@ -4,6 +4,7 @@ import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.security.JwtUtils;
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.RefreshToken;
 import com.plateforme.user.entity.Role;
@@ -60,6 +61,8 @@ class AuthServiceTest {
     private ValueOperations<String, String> valueOperations;
     @Mock
     private EntityManager entityManager;
+    @Mock
+    private PublicMediaUrlResolver publicMediaUrlResolver;
 
     @InjectMocks
     private AuthService authService;
@@ -81,6 +84,7 @@ class AuthServiceTest {
         testUser.setEmail("test@example.com");
         testUser.setPasswordHash("hashedPassword");
         testUser.setFullName("Test User");
+        testUser.setPublicUsername("testuser");
         testUser.setRoles(new HashSet<>(Set.of(testRole)));
         testUser.setEnabled(true);
         testUser.setAccountNonLocked(true);
@@ -97,15 +101,17 @@ class AuthServiceTest {
 
     @Test
     void signup_success_creator() {
-        SignupRequest request = new SignupRequest("new@example.com", "password123", "New User", "CREATOR");
+        SignupRequest request = new SignupRequest("new@example.com", "password123", "New User", "newuser", "CREATOR");
 
         when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("newuser")).thenReturn(false);
         when(roleRepository.findByName("ROLE_CREATOR")).thenReturn(Optional.of(testRole));
         when(passwordEncoder.encode("password123")).thenReturn("hashedPassword");
         when(userRepository.save(any(User.class))).thenReturn(testUser);
         when(jwtUtils.generateAccessToken(any())).thenReturn("access-token");
         when(jwtUtils.generateRefreshTokenValue()).thenReturn("refresh-token");
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenReturn(testRefreshToken);
+        when(publicMediaUrlResolver.resolveAvatarUrl(any())).thenReturn(null);
 
         AuthResponse response = authService.signup(request);
 
@@ -119,7 +125,7 @@ class AuthServiceTest {
 
     @Test
     void signup_throwsBusinessException_whenEmailAlreadyExists() {
-        SignupRequest request = new SignupRequest("test@example.com", "password123", "Test", "CREATOR");
+        SignupRequest request = new SignupRequest("test@example.com", "password123", "Test", "testuser", "CREATOR");
 
         when(userRepository.existsByEmail("test@example.com")).thenReturn(true);
 
@@ -128,6 +134,19 @@ class AuthServiceTest {
                 .hasMessageContaining("email")
                 .extracting("code")
                 .isEqualTo("EMAIL_ALREADY_EXISTS");
+    }
+
+    @Test
+    void signup_throwsBusinessException_whenUsernameAlreadyExists() {
+        SignupRequest request = new SignupRequest("new@example.com", "password123", "New User", "Leopard", "CREATOR");
+
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+        when(userRepository.existsByUsername("Leopard")).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.signup(request))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("USERNAME_ALREADY_EXISTS");
     }
 
     // --- Tests login ---
@@ -144,6 +163,7 @@ class AuthServiceTest {
         when(jwtUtils.generateAccessToken(any())).thenReturn("access-token");
         when(jwtUtils.generateRefreshTokenValue()).thenReturn("new-refresh-token");
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenReturn(testRefreshToken);
+        when(publicMediaUrlResolver.resolveAvatarUrl(any())).thenReturn(null);
 
         AuthResponse response = authService.login(request);
 

@@ -129,6 +129,7 @@ public class UserAdminService {
                 user.getId(),
                 user.getEmail(),
                 user.getFullName(),
+                user.getPublicUsername(),
                 user.getAvatarUrl(),
                 roleNames,
                 user.getCreatedAt(),

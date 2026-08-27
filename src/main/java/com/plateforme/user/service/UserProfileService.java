@@ -8,6 +8,7 @@ import com.plateforme.user.dto.UpdateUserProfileDto;
 import com.plateforme.user.dto.UserDto;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.support.UsernameSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,11 @@ public class UserProfileService {
                 throw new BusinessException("INVALID_FULL_NAME", "Full name cannot be empty");
             }
             user.setFullName(trimmed);
+        }
+        if (dto.username() != null) {
+            String username = UsernameSupport.normalize(dto.username());
+            UsernameSupport.requireAvailable(userRepository, username, userId);
+            user.setPublicUsername(username);
         }
         user = userRepository.save(user);
         log.info("User profile updated user={}", userId);

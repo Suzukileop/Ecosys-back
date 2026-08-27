@@ -1,6 +1,7 @@
 package com.plateforme.user.entity;
 
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -43,6 +44,16 @@ public class User implements UserDetails {
 
     @Column(name = "full_name", length = 150)
     private String fullName;
+
+    /**
+     * Public unique handle (case-sensitive: leopard ≠ Leopard).
+     * Accessors are {@link #getPublicUsername()} / {@link #setPublicUsername(String)} —
+     * {@link #getUsername()} is reserved by Spring Security and returns the email.
+     */
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    @Column(name = "username", nullable = false, length = 30)
+    private String username;
 
     @Column(name = "avatar_url", length = 500)
     private String avatarUrl;
@@ -94,11 +105,20 @@ public class User implements UserDetails {
                 .collect(Collectors.toSet());
     }
 
+    public String getPublicUsername() {
+        return username;
+    }
+
+    public void setPublicUsername(String username) {
+        this.username = username;
+    }
+
     @Override
     public String getPassword() {
         return passwordHash;
     }
 
+    /** Spring Security principal — email, not the public handle. */
     @Override
     public String getUsername() {
         return email;

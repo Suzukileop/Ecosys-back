@@ -14,6 +14,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.RefreshTokenRepository;
 import com.plateforme.user.repository.RoleRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.support.UsernameSupport;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -58,6 +59,9 @@ public class AuthService {
             throw new BusinessException("EMAIL_ALREADY_EXISTS", "Un compte avec cet email existe déjà");
         }
 
+        String username = UsernameSupport.normalize(request.username());
+        UsernameSupport.requireAvailable(userRepository, username, null);
+
         String roleName = "ROLE_CREATOR";
         Role role = roleRepository.findByName(roleName)
                 .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Rôle introuvable: " + roleName));
@@ -66,10 +70,11 @@ public class AuthService {
         user.setEmail(request.email());
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFullName(request.fullName());
+        user.setPublicUsername(username);
         user.setRoles(Set.of(role));
 
         user = userRepository.save(user);
-        log.info("Nouvel utilisateur créé: {} avec rôle {}", user.getEmail(), roleName);
+        log.info("Nouvel utilisateur créé: {} (@{}) avec rôle {}", user.getEmail(), user.getPublicUsername(), roleName);
 
         CreatorProfile profile = new CreatorProfile();
         profile.setUser(user);
@@ -185,6 +190,7 @@ public class AuthService {
                 user.getId(),
                 user.getEmail(),
                 user.getFullName(),
+                user.getPublicUsername(),
                 publicMediaUrlResolver.resolveAvatarUrl(user.getAvatarUrl()),
                 roleNames,
                 user.getCreatedAt(),

@@ -49,6 +49,7 @@ class AuthControllerIntegrationTest {
                 UUID.randomUUID(),
                 "test@example.com",
                 "Test User",
+                "testuser",
                 null,
                 Set.of("ROLE_CREATOR"),
                 LocalDateTime.now(),
@@ -59,7 +60,7 @@ class AuthControllerIntegrationTest {
 
     @Test
     void signup_returns201_whenValidRequest() throws Exception {
-        SignupRequest request = new SignupRequest("new@example.com", "password123", "New User", "CREATOR");
+        SignupRequest request = new SignupRequest("new@example.com", "password123", "New User", "newuser", "CREATOR");
         when(authService.signup(any(SignupRequest.class))).thenReturn(buildTestAuthResponse());
 
         mockMvc.perform(post("/api/auth/signup")
@@ -73,7 +74,7 @@ class AuthControllerIntegrationTest {
 
     @Test
     void signup_returns400_whenInvalidEmail() throws Exception {
-        SignupRequest request = new SignupRequest("not-an-email", "password123", "New User", "CREATOR");
+        SignupRequest request = new SignupRequest("not-an-email", "password123", "New User", "newuser", "CREATOR");
 
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -83,7 +84,7 @@ class AuthControllerIntegrationTest {
 
     @Test
     void signup_returns400_whenPasswordTooShort() throws Exception {
-        SignupRequest request = new SignupRequest("valid@example.com", "short", "New User", "CREATOR");
+        SignupRequest request = new SignupRequest("valid@example.com", "short", "New User", "newuser", "CREATOR");
 
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)

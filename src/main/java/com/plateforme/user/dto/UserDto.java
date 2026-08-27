@@ -8,6 +8,7 @@ public record UserDto(
         UUID id,
         String email,
         String fullName,
+        String username,
         String avatarUrl,
         Set<String> roles,
         LocalDateTime createdAt,

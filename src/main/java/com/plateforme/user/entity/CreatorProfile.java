@@ -6,6 +6,7 @@ import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
@@ -116,6 +117,10 @@ public class CreatorProfile {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "gallery_items", columnDefinition = "jsonb", nullable = false)
     private List<ProfileGalleryItemDto> galleryItems = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "portfolio_works", columnDefinition = "jsonb", nullable = false)
+    private List<ProfilePortfolioWorkDto> portfolioWorks = new ArrayList<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "about_us", columnDefinition = "jsonb")

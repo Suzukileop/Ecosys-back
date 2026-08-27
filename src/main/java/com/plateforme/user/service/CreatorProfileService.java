@@ -7,6 +7,7 @@ import com.plateforme.user.dto.CreatorProfileDto;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
+import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
@@ -48,8 +49,8 @@ public class CreatorProfileService {
     public CreatorProfileDto getMyProfile(UUID userId) {
         User user = requireCreatorUser(userId);
         CreatorProfile profile = getOrCreateProfile(user);
-        long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
-        return toDto(profile, user, portfolioCount);
+        long curatedCount = creatorPortfolioService.countPublicCuratedPosts(userId);
+        return toDto(profile, user, resolvePortfolioCount(profile, curatedCount));
     }
 
     @Transactional
@@ -151,6 +152,10 @@ public class CreatorProfileService {
             profile.setGalleryItems(new ArrayList<>(
                     ProfileExtensionsSupport.normalizeGalleryItems(dto.galleryItems(), userId)));
         }
+        if (dto.portfolioWorks() != null) {
+            profile.setPortfolioWorks(new ArrayList<>(
+                    ProfileExtensionsSupport.normalizePortfolioWorks(dto.portfolioWorks(), userId)));
+        }
         if (dto.aboutUs() != null) {
             profile.setAboutUs(ProfileExtensionsSupport.normalizeAboutUs(dto.aboutUs(), userId));
         }
@@ -182,8 +187,8 @@ public class CreatorProfileService {
         profile = creatorProfileRepository.save(profile);
         log.debug("Profil créateur mis à jour pour user={}", userId);
 
-        long portfolioCount = creatorPortfolioService.countPublicCuratedPosts(userId);
-        return toDto(profile, user, portfolioCount);
+        long curatedCount = creatorPortfolioService.countPublicCuratedPosts(userId);
+        return toDto(profile, user, resolvePortfolioCount(profile, curatedCount));
     }
 
     @Transactional(readOnly = true)
@@ -334,6 +339,7 @@ public class CreatorProfileService {
                 p.getId(),
                 user.getId(),
                 user.getFullName(),
+                user.getPublicUsername(),
                 user.getAvatarUrl(),
                 ProfileBioSupport.normalize(p.getBio()),
                 SpecialtyTaxonomy.primaryOf(specialties) != null
@@ -390,6 +396,7 @@ public class CreatorProfileService {
                 safeFaq(p.getFaqItems()),
                 safeTeamMembers(p.getTeamMembers()),
                 safeGalleryItems(p.getGalleryItems()),
+                safePortfolioWorks(p.getPortfolioWorks()),
                 p.getAboutUs(),
                 links,
                 user.getCreatedAt(),
@@ -397,6 +404,11 @@ public class CreatorProfileService {
                 p.getTypicalResponseTime(),
                 p.getResponseTimeSampleCount()
         );
+    }
+
+    private static long resolvePortfolioCount(CreatorProfile profile, long curatedCount) {
+        List<ProfilePortfolioWorkDto> works = safePortfolioWorks(profile.getPortfolioWorks());
+        return !works.isEmpty() ? works.size() : curatedCount;
     }
 
     private static List<ProfileMediaBlock> safeBlocks(List<ProfileMediaBlock> blocks) {
@@ -450,6 +462,10 @@ public class CreatorProfileService {
 
     private static List<ProfileGalleryItemDto> safeGalleryItems(List<ProfileGalleryItemDto> galleryItems) {
         return galleryItems != null ? galleryItems : List.of();
+    }
+
+    private static List<ProfilePortfolioWorkDto> safePortfolioWorks(List<ProfilePortfolioWorkDto> portfolioWorks) {
+        return portfolioWorks != null ? portfolioWorks : List.of();
     }
 
     private static List<ProfileLinkDto> safeLinks(List<ProfileLinkDto> links) {

@@ -280,7 +280,7 @@ public class ContentPostService {
             return Page.empty(pageable);
         }
         return userRepository.searchByFullNameExcluding(q, creatorId, pageable)
-                .map(u -> new MinimalUserDto(u.getId(), u.getFullName(), u.getAvatarUrl()));
+                .map(u -> new MinimalUserDto(u.getId(), u.getFullName(), u.getPublicUsername(), u.getAvatarUrl()));
     }
 
     public ContentPostResponse toResponse(ContentPost post, long portfolioCount) {
@@ -294,6 +294,7 @@ public class ContentPostService {
         MinimalUserDto minimal = new MinimalUserDto(
                 creator.getId(),
                 creator.getFullName(),
+                creator.getPublicUsername(),
                 creator.getAvatarUrl(),
                 appRole,
                 specialite,
@@ -438,7 +439,7 @@ public class ContentPostService {
         for (UUID id : ids) {
             User user = byId.get(id);
             if (user != null) {
-                result.add(new MinimalUserDto(user.getId(), user.getFullName(), user.getAvatarUrl()));
+                result.add(new MinimalUserDto(user.getId(), user.getFullName(), user.getPublicUsername(), user.getAvatarUrl()));
             }
         }
         return result;

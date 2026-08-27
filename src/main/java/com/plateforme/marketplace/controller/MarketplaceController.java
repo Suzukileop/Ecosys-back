@@ -136,10 +136,11 @@ public class MarketplaceController {
     })
     @GetMapping("/creators/{id}")
     public ResponseEntity<CreatorProfileResponse> getCreatorPublicProfile(
-            @PathVariable UUID id,
+            @PathVariable String id,
             Authentication authentication) {
         UUID viewerUserId = resolveViewerUserId(authentication);
-        return ResponseEntity.ok(marketplaceService.getCreatorPublicProfile(id, viewerUserId));
+        UUID creatorId = marketplaceService.resolveCreatorUserId(id);
+        return ResponseEntity.ok(marketplaceService.getCreatorPublicProfile(creatorId, viewerUserId));
     }
 
     @Operation(summary = "List public product catalogues for a creator")

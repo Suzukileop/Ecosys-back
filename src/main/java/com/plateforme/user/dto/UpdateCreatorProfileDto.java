@@ -142,6 +142,10 @@ public record UpdateCreatorProfileDto(
         List<ProfileGalleryItemDto> galleryItems,
 
         @Valid
+        @Size(max = 6)
+        List<ProfilePortfolioWorkDto> portfolioWorks,
+
+        @Valid
         ProfileAboutUsDto aboutUs,
 
         @Pattern(regexp = "WITHIN_1_HOUR|FEW_HOURS|WITHIN_DAY|WITHIN_2_3_DAYS|")

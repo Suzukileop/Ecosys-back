@@ -4,6 +4,7 @@ import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
@@ -17,6 +18,7 @@ import java.util.UUID;
 public record CreatorProfileResponse(
         UUID userId,
         String fullName,
+        String username,
         String avatarUrl,
         String phone,
         String bio,
@@ -64,6 +66,7 @@ public record CreatorProfileResponse(
         List<FaqItemDto> faqItems,
         List<ProfileTeamMemberDto> teamMembers,
         List<ProfileGalleryItemDto> galleryItems,
+        List<ProfilePortfolioWorkDto> portfolioWorks,
         ProfileAboutUsDto aboutUs,
         List<ProfileLinkDto> profileLinks,
         LocalDateTime memberSince,

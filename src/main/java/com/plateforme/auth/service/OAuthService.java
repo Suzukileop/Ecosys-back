@@ -14,6 +14,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.RefreshTokenRepository;
 import com.plateforme.user.repository.RoleRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.support.UsernameSupport;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -239,6 +240,10 @@ public class OAuthService {
         User user = new User();
         user.setEmail(profile.email());
         user.setFullName(profile.fullName() != null ? profile.fullName() : profile.email());
+        user.setPublicUsername(UsernameSupport.allocateFromSeed(
+                userRepository,
+                profile.email() != null ? profile.email() : profile.fullName(),
+                null));
         user.setAvatarUrl(profile.avatarUrl());
         user.setAuthProvider(profile.provider());
         user.setProviderUserId(profile.providerUserId());

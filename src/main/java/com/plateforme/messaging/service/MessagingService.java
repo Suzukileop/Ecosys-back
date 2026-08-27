@@ -259,7 +259,7 @@ public class MessagingService {
         }
         return userRepository.searchByFullNameExcluding(q, currentUserId, pageable)
                 .map(u -> new com.plateforme.marketplace.dto.MinimalUserDto(
-                        u.getId(), u.getFullName(), u.getAvatarUrl()));
+                        u.getId(), u.getFullName(), u.getPublicUsername(), u.getAvatarUrl()));
     }
 
     @Transactional(readOnly = true)
