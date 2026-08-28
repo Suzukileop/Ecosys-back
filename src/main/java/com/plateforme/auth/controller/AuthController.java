@@ -5,6 +5,8 @@ import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.security.JwtUtils;
 import com.plateforme.auth.service.AuthService;
+import com.plateforme.user.entity.User;
+import com.plateforme.user.presence.PresenceService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -30,6 +32,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final JwtUtils jwtUtils;
+    private final PresenceService presenceService;
 
     @Operation(summary = "Inscription", description = "Crée un nouveau compte utilisateur (CREATOR)")
     @ApiResponses({
@@ -96,6 +99,13 @@ public class AuthController {
 
         if (refreshToken != null && !refreshToken.isBlank()) {
             authService.logout(refreshToken, jti, remainingMs);
+        }
+        if (userDetails instanceof User user) {
+            try {
+                presenceService.forceOffline(user.getId());
+            } catch (Exception ex) {
+                log.warn("Presence offline on logout failed: {}", ex.getMessage());
+            }
         }
         log.info("Déconnexion effectuée pour: {}", userDetails != null ? userDetails.getUsername() : "unknown");
         return ResponseEntity.noContent().build();

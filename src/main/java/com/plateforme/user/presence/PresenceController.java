@@ -60,6 +60,15 @@ public class PresenceController {
         return ResponseEntity.ok(PresenceStatusDto.from(status));
     }
 
+    @PostMapping("/offline")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Mark the current user offline (logout / tab close)")
+    public ResponseEntity<PresenceStatusDto> offline() {
+        User user = (User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        PresenceStatus status = presenceService.forceOffline(user.getId());
+        return ResponseEntity.ok(PresenceStatusDto.from(status));
+    }
+
     private static List<UUID> parseIds(String idsParam) {
         if (idsParam == null || idsParam.isBlank()) {
             return List.of();

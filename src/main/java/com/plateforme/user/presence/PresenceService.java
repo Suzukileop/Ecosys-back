@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -21,12 +22,13 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Online presence with:
+ * Online presence means a <em>live browser connection</em> only:
  * <ul>
- *   <li>WebSocket session registry (in-memory + Redis mirror)</li>
- *   <li>HTTP heartbeat TTL (reliable while the dashboard is open)</li>
+ *   <li>WebSocket session registry (in-memory + Redis mirror with TTL)</li>
+ *   <li>HTTP heartbeat TTL while the dashboard tab is open</li>
  *   <li>Short offline grace so refreshes do not flicker</li>
  * </ul>
+ * Auth session (refresh cookie) is independent — being logged in does not imply Online.
  */
 @Service
 @RequiredArgsConstructor
@@ -35,7 +37,8 @@ public class PresenceService {
 
     static final Duration OFFLINE_GRACE = Duration.ofSeconds(20);
     static final Duration HEARTBEAT_TTL = Duration.ofSeconds(75);
-    private static final Duration SESSION_MAP_TTL = Duration.ofHours(12);
+    /** Soft TTL for Redis WS session mirrors — refreshed on each connect/heartbeat. */
+    private static final Duration SESSION_MAP_TTL = Duration.ofMinutes(3);
 
     private static final String SESSIONS_PREFIX = "presence:sessions:";
     private static final String LAST_SEEN_PREFIX = "presence:lastSeen:";
@@ -52,6 +55,7 @@ public class PresenceService {
     private final ConcurrentHashMap<UUID, Instant> heartbeatUntil = new ConcurrentHashMap<>();
 
     private final ConcurrentHashMap<UUID, ScheduledFuture<?>> pendingOffline = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, ScheduledFuture<?>> pendingHeartbeatExpiry = new ConcurrentHashMap<>();
     private final ScheduledExecutorService graceScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread t = new Thread(r, "presence-offline-grace");
         t.setDaemon(true);
@@ -76,6 +80,7 @@ public class PresenceService {
         try {
             redisTemplate.opsForValue().set(sessionUserKey(sessionId), userId.toString(), SESSION_MAP_TTL);
             redisTemplate.opsForSet().add(sessionsKey(userId), sessionId);
+            redisTemplate.expire(sessionsKey(userId), SESSION_MAP_TTL);
         } catch (Exception ex) {
             log.warn("Presence Redis mirror failed on connect user={}: {}", userId, ex.getMessage());
         }
@@ -135,7 +140,7 @@ public class PresenceService {
     }
 
     /**
-     * Marks the authenticated user online via HTTP heartbeat (dashboard open).
+     * Marks the authenticated user online via HTTP heartbeat (dashboard open / visible).
      */
     public PresenceStatus heartbeat(UUID userId) {
         if (userId == null) {
@@ -149,15 +154,55 @@ public class PresenceService {
         heartbeatUntil.put(userId, until);
         try {
             redisTemplate.opsForValue().set(heartbeatKey(userId), until.toString(), HEARTBEAT_TTL);
+            // Keep WS session mirrors alive while the tab is still heartbeating.
+            refreshSessionMirrors(userId);
         } catch (Exception ex) {
             log.warn("Presence Redis heartbeat failed user={}: {}", userId, ex.getMessage());
         }
+
+        scheduleHeartbeatExpiry(userId);
 
         if (!wasOnline) {
             broadcast(userId, true, lastSeenAt(userId));
             log.info("Presence ONLINE (heartbeat) user={}", userId);
         }
         return getStatus(userId);
+    }
+
+    /**
+     * Immediately marks the user offline (logout, tab close / pagehide).
+     * Clears WS mirrors, heartbeat, and grace — then broadcasts offline.
+     */
+    public PresenceStatus forceOffline(UUID userId) {
+        if (userId == null) {
+            return new PresenceStatus(null, false, null);
+        }
+
+        cancelPendingOffline(userId);
+        cancelHeartbeatExpiry(userId);
+        heartbeatUntil.remove(userId);
+
+        Set<String> sessions = userSessions.remove(userId);
+        if (sessions != null) {
+            for (String sessionId : sessions) {
+                sessionToUser.remove(sessionId);
+                deleteRedisQuietly(sessionUserKey(sessionId));
+            }
+        }
+
+        Instant seenAt = Instant.now();
+        try {
+            redisTemplate.delete(sessionsKey(userId));
+            redisTemplate.delete(heartbeatKey(userId));
+            redisTemplate.delete(graceKey(userId));
+            redisTemplate.opsForValue().set(lastSeenKey(userId), seenAt.toString());
+        } catch (Exception ex) {
+            log.warn("Presence Redis forceOffline failed user={}: {}", userId, ex.getMessage());
+        }
+
+        broadcast(userId, false, seenAt);
+        log.info("Presence OFFLINE (forced) user={}", userId);
+        return new PresenceStatus(userId, false, seenAt);
     }
 
     public boolean isOnline(UUID userId) {
@@ -175,12 +220,11 @@ public class PresenceService {
             if (Boolean.TRUE.equals(inGrace)) {
                 return true;
             }
-            Long size = redisTemplate.opsForSet().size(sessionsKey(userId));
-            if (size != null && size > 0L) {
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(heartbeatKey(userId)))) {
                 return true;
             }
-            Boolean hb = redisTemplate.hasKey(heartbeatKey(userId));
-            return Boolean.TRUE.equals(hb);
+            // Only trust Redis WS SET members that still have a live session→user key.
+            return hasLiveRedisWsSessions(userId);
         } catch (Exception ex) {
             log.debug("Presence Redis isOnline failed user={}: {}", userId, ex.getMessage());
             return false;
@@ -237,10 +281,104 @@ public class PresenceService {
         return false;
     }
 
+    /**
+     * Prunes orphaned Redis session ids (SET members without a matching session→user key).
+     * Returns true only if at least one live member remains.
+     */
+    private boolean hasLiveRedisWsSessions(UUID userId) {
+        try {
+            Set<String> members = redisTemplate.opsForSet().members(sessionsKey(userId));
+            if (members == null || members.isEmpty()) {
+                return false;
+            }
+            Set<String> orphans = new HashSet<>();
+            boolean anyLive = false;
+            for (String sessionId : members) {
+                if (sessionId == null || sessionId.isBlank()) {
+                    orphans.add(sessionId);
+                    continue;
+                }
+                Boolean exists = redisTemplate.hasKey(sessionUserKey(sessionId));
+                if (Boolean.TRUE.equals(exists)) {
+                    anyLive = true;
+                } else {
+                    orphans.add(sessionId);
+                }
+            }
+            if (!orphans.isEmpty()) {
+                redisTemplate.opsForSet().remove(sessionsKey(userId), orphans.toArray());
+            }
+            if (!anyLive) {
+                redisTemplate.delete(sessionsKey(userId));
+            }
+            return anyLive;
+        } catch (Exception ex) {
+            log.debug("Presence Redis prune failed user={}: {}", userId, ex.getMessage());
+            return false;
+        }
+    }
+
+    private void refreshSessionMirrors(UUID userId) {
+        try {
+            Set<String> members = redisTemplate.opsForSet().members(sessionsKey(userId));
+            if (members == null || members.isEmpty()) {
+                return;
+            }
+            for (String sessionId : members) {
+                if (sessionId == null || sessionId.isBlank()) {
+                    continue;
+                }
+                String key = sessionUserKey(sessionId);
+                if (Boolean.TRUE.equals(redisTemplate.hasKey(key))) {
+                    redisTemplate.expire(key, SESSION_MAP_TTL);
+                }
+            }
+            redisTemplate.expire(sessionsKey(userId), SESSION_MAP_TTL);
+        } catch (Exception ex) {
+            log.debug("Presence Redis session refresh failed user={}: {}", userId, ex.getMessage());
+        }
+    }
+
+    private void scheduleHeartbeatExpiry(UUID userId) {
+        cancelHeartbeatExpiry(userId);
+        long delayMs = HEARTBEAT_TTL.toMillis() + 1_500L;
+        ScheduledFuture<?> future = graceScheduler.schedule(() -> {
+            pendingHeartbeatExpiry.remove(userId);
+            try {
+                if (hasActiveWsSession(userId) || hasFreshHeartbeat(userId)) {
+                    return;
+                }
+                try {
+                    if (Boolean.TRUE.equals(redisTemplate.hasKey(heartbeatKey(userId)))) {
+                        return;
+                    }
+                    if (hasLiveRedisWsSessions(userId)) {
+                        return;
+                    }
+                } catch (Exception ignored) {
+                    /* fall through to offline */
+                }
+                beginOfflineGrace(userId);
+            } catch (Exception ex) {
+                log.warn("Presence heartbeat expiry check failed user={}: {}", userId, ex.getMessage());
+            }
+        }, delayMs, TimeUnit.MILLISECONDS);
+        pendingHeartbeatExpiry.put(userId, future);
+    }
+
+    private void cancelHeartbeatExpiry(UUID userId) {
+        ScheduledFuture<?> pending = pendingHeartbeatExpiry.remove(userId);
+        if (pending != null) {
+            pending.cancel(false);
+        }
+    }
+
     private void beginOfflineGrace(UUID userId) {
         Instant seenAt = Instant.now();
         try {
             redisTemplate.delete(sessionsKey(userId));
+            redisTemplate.delete(heartbeatKey(userId));
+            heartbeatUntil.remove(userId);
             redisTemplate.opsForValue().set(lastSeenKey(userId), seenAt.toString());
             redisTemplate.opsForValue().set(graceKey(userId), "1", OFFLINE_GRACE);
         } catch (Exception ex) {
@@ -260,12 +398,11 @@ public class PresenceService {
                     return;
                 }
                 try {
-                    Long size = redisTemplate.opsForSet().size(sessionsKey(userId));
-                    if (size != null && size > 0L) {
+                    if (Boolean.TRUE.equals(redisTemplate.hasKey(heartbeatKey(userId)))) {
                         deleteRedisQuietly(graceKey(userId));
                         return;
                     }
-                    if (Boolean.TRUE.equals(redisTemplate.hasKey(heartbeatKey(userId)))) {
+                    if (hasLiveRedisWsSessions(userId)) {
                         deleteRedisQuietly(graceKey(userId));
                         return;
                     }
