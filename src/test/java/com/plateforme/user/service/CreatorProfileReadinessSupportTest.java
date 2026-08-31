@@ -122,7 +122,7 @@ class CreatorProfileReadinessSupportTest {
         profile.setLocationCity("Paris");
         profile.setLocationCountry("FR");
         profile.setProfileLinks(List.of(
-                new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site", "https://example.com", 0, null)));
+                new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site", "https://example.com", 0, null, null)));
         profile.setContactEmails(List.of(
                 new ProfileContactEntryDto(UUID.randomUUID(), 0, "ada@example.com")));
         profile.setContactPhones(List.of(

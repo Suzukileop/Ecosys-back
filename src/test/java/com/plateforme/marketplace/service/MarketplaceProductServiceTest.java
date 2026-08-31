@@ -11,6 +11,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorProfileReadinessService;
+import com.plateforme.user.service.FollowerPublishNotifyService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,9 @@ class MarketplaceProductServiceTest {
 
     @Mock
     private CreatorProfileReadinessService creatorProfileReadinessService;
+
+    @Mock
+    private FollowerPublishNotifyService followerPublishNotifyService;
 
     @InjectMocks
     private MarketplaceProductService productService;

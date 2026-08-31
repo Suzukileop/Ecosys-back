@@ -3,8 +3,10 @@ package com.plateforme.shared.exception;
 import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -12,9 +14,12 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 import com.plateforme.credits.exception.InsufficientCreditsException;
 
+import java.io.EOFException;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -124,14 +129,78 @@ public class GlobalExceptionHandler {
                 .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", ex.getMessage(), request));
     }
 
+    /**
+     * Client closed the connection while the body was still being read
+     * (navigation, HMR reload, aborted fetch). Not a server fault — avoid ERROR spam.
+     */
+    @ExceptionHandler({
+            ClientAbortException.class,
+            AsyncRequestNotUsableException.class
+    })
+    public ResponseEntity<Void> handleClientAbort(Exception ex, HttpServletRequest request) {
+        log.debug("Client aborted request {}: {}", request.getRequestURI(), ex.toString());
+        return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).build();
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleUnreadableMessage(
+            HttpMessageNotReadableException ex, HttpServletRequest request) {
+        if (isClientAbort(ex)) {
+            log.debug("Client aborted while reading body {}: {}", request.getRequestURI(), ex.toString());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+        }
+        log.warn("Corps de requête illisible {}: {}", request.getRequestURI(), rootMessage(ex));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(buildError(HttpStatus.BAD_REQUEST, "Bad Request",
+                        "Le corps de la requête est invalide ou incomplet", request));
+    }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, HttpServletRequest request) {
+        if (isClientAbort(ex)) {
+            log.debug("Client aborted request {}: {}", request.getRequestURI(), ex.toString());
+            return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).build();
+        }
         log.error("Erreur interne inattendue: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",
                         "Une erreur interne s'est produite", request));
+    }
+
+    private static boolean isClientAbort(Throwable ex) {
+        Throwable current = ex;
+        while (current != null) {
+            if (current instanceof ClientAbortException
+                    || current instanceof AsyncRequestNotUsableException
+                    || current instanceof EOFException) {
+                return true;
+            }
+            String message = current.getMessage();
+            if (message != null) {
+                String lower = message.toLowerCase();
+                if (lower.contains("broken pipe")
+                        || lower.contains("connection reset")
+                        || lower.contains("clientabortexception")) {
+                    return true;
+                }
+            }
+            if (current instanceof IOException && current.getCause() == null
+                    && message != null
+                    && message.toLowerCase().contains("eof")) {
+                return true;
+            }
+            current = current.getCause();
+        }
+        return false;
+    }
+
+    private static String rootMessage(Throwable ex) {
+        Throwable current = ex;
+        while (current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current.getMessage() != null ? current.getMessage() : ex.getMessage();
     }
 
     private ErrorResponse buildError(HttpStatus status, String error, String message, HttpServletRequest request) {

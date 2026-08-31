@@ -116,76 +116,6 @@ public final class ProfileStoryFieldsSupport {
         return List.copyOf(normalized);
     }
 
-    /**
-     * Why choose me is text-only: drop media before validation/normalization.
-     */
-    public static List<ProfileMediaBlock> normalizeWhyMeBlocks(List<ProfileMediaBlock> raw, UUID userId) {
-        if (raw == null) {
-            return List.of();
-        }
-        List<ProfileMediaBlock> withoutMedia = new ArrayList<>(raw.size());
-        for (ProfileMediaBlock block : raw) {
-            if (block == null) {
-                continue;
-            }
-            withoutMedia.add(new ProfileMediaBlock(
-                    block.id(),
-                    block.sortOrder(),
-                    block.title(),
-                    block.organization(),
-                    block.text(),
-                    null,
-                    null,
-                    block.period(),
-                    block.subtitles(),
-                    block.status(),
-                    block.tasks(),
-                    block.tools(),
-                    block.links(),
-                    block.remarks(),
-                    block.location(),
-                    block.employmentType()
-            ));
-        }
-        return normalizeBlocks(withoutMedia, userId);
-    }
-
-    /** Strip legacy media from Why choose me blocks for API responses. */
-    public static List<ProfileMediaBlock> stripWhyMeMedia(List<ProfileMediaBlock> blocks) {
-        if (blocks == null || blocks.isEmpty()) {
-            return blocks == null ? List.of() : List.copyOf(blocks);
-        }
-        List<ProfileMediaBlock> stripped = new ArrayList<>(blocks.size());
-        for (ProfileMediaBlock block : blocks) {
-            if (block == null) {
-                continue;
-            }
-            if (block.mediaUrl() == null && block.mediaType() == null) {
-                stripped.add(block);
-                continue;
-            }
-            stripped.add(new ProfileMediaBlock(
-                    block.id(),
-                    block.sortOrder(),
-                    block.title(),
-                    block.organization(),
-                    block.text(),
-                    null,
-                    null,
-                    block.period(),
-                    block.subtitles(),
-                    block.status(),
-                    block.tasks(),
-                    block.tools(),
-                    block.links(),
-                    block.remarks(),
-                    block.location(),
-                    block.employmentType()
-            ));
-        }
-        return List.copyOf(stripped);
-    }
-
     static String normalizePeriod(String raw) {
         return normalizeOptionalLabel(raw, MAX_PERIOD_LENGTH, "PERIOD_TOO_LONG", "Period");
     }
@@ -530,5 +460,9 @@ public final class ProfileStoryFieldsSupport {
     static boolean hasStrengths(List<ProfileStrengthToolDto> strengths) {
         return strengths != null && strengths.stream()
                 .anyMatch(s -> s != null && s.name() != null && !s.name().isBlank());
+    }
+
+    public static boolean hasProfileStack(List<ProfileStrengthToolDto> profileStack) {
+        return hasStrengths(profileStack);
     }
 }

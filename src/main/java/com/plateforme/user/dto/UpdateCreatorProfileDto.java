@@ -105,8 +105,6 @@ public record UpdateCreatorProfileDto(
         @Size(max = 1000)
         String shopCoverUrl,
 
-        List<ProfileMediaBlock> whyMeBlocks,
-
         List<ProfileMediaBlock> experienceBlocks,
 
         @Min(0)
@@ -114,6 +112,8 @@ public record UpdateCreatorProfileDto(
         Integer yearsOfExperience,
 
         List<ProfileStrengthToolDto> strengthsToolsMastered,
+
+        List<ProfileStrengthToolDto> profileStack,
 
         @Size(max = 50)
         String gender,
@@ -125,7 +125,7 @@ public record UpdateCreatorProfileDto(
         @Pattern(regexp = "GENERAL_MEMBER|SERVICE_PROVIDER|FREELANCER_STUDENT|JOB_SEEKER|SELLER|RH_RECRUITER")
         String appRole,
 
-        List<String> spokenLanguages,
+        List<ProfileSpokenLanguageDto> spokenLanguages,
 
         List<ProfileServiceDto> profileServices,
 
@@ -147,6 +147,22 @@ public record UpdateCreatorProfileDto(
 
         @Valid
         ProfileAboutUsDto aboutUs,
+
+        @Size(max = 12)
+        List<String> aboutSkills,
+
+        @Size(max = 12)
+        List<String> aboutStrengths,
+
+        @Size(max = 16)
+        List<String> aboutSystemsTools,
+
+        @Size(max = 12)
+        List<String> aboutInterests,
+
+        @Valid
+        @Size(max = 8)
+        List<ProfileEducationEntryDto> aboutEducation,
 
         @Pattern(regexp = "WITHIN_1_HOUR|FEW_HOURS|WITHIN_DAY|WITHIN_2_3_DAYS|")
         @Size(max = 40)

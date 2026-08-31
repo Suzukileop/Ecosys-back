@@ -5,11 +5,13 @@ import com.plateforme.shared.util.OwnedMediaUrlValidator;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileAboutUsFounderDto;
+import com.plateforme.user.dto.ProfileEducationEntryDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import com.plateforme.user.dto.ProfileTeamSocialLinkDto;
 
@@ -40,6 +42,9 @@ public final class ProfileExtensionsSupport {
     static final int MAX_SERVICE_TAG_LENGTH = 40;
     static final int MAX_SERVICE_COVER_URL = 500;
     static final int MAX_LANGUAGE_LENGTH = 50;
+    private static final Set<String> ALLOWED_LANGUAGE_LEVELS = Set.of(
+            "beginner", "intermediate", "advanced", "expert"
+    );
     static final int MAX_LINK_LABEL = 100;
     static final int MAX_LINK_URL = 500;
     static final int MAX_TEAM_MEMBERS = 12;
@@ -70,6 +75,15 @@ public final class ProfileExtensionsSupport {
     static final int MAX_CONTACT_ADDRESS = 300;
     static final int MAX_CONTACT_PHONE = 50;
     static final int MAX_CONTACT_EMAIL = 255;
+    static final int MAX_ABOUT_SKILLS = 12;
+    static final int MAX_ABOUT_STRENGTHS = 12;
+    static final int MAX_ABOUT_SYSTEMS_TOOLS = 16;
+    static final int MAX_ABOUT_INTERESTS = 12;
+    static final int MAX_ABOUT_STRING_LENGTH = 120;
+    static final int MAX_ABOUT_EDUCATION = 8;
+    static final int MAX_ABOUT_EDUCATION_SCHOOL_YEAR = 40;
+    static final int MAX_ABOUT_EDUCATION_TITLE = 150;
+    static final int MAX_ABOUT_EDUCATION_INSTITUTION = 200;
 
     private static final Set<String> ALLOWED_LINK_TYPES = Set.of("WEBSITE", "SOCIAL", "CTA", "CUSTOM");
     private static final Set<String> ALLOWED_TEAM_SOCIAL_PLATFORMS = Set.of(
@@ -197,17 +211,17 @@ public final class ProfileExtensionsSupport {
         return trimmed;
     }
 
-    public static List<String> normalizeSpokenLanguages(List<String> raw) {
+    public static List<ProfileSpokenLanguageDto> normalizeSpokenLanguages(List<ProfileSpokenLanguageDto> raw) {
         if (raw == null || raw.isEmpty()) {
             return List.of();
         }
         Set<String> uniqueKeys = new LinkedHashSet<>();
-        List<String> result = new ArrayList<>();
-        for (String item : raw) {
+        List<ProfileSpokenLanguageDto> result = new ArrayList<>();
+        for (ProfileSpokenLanguageDto item : raw) {
             if (item == null) {
                 continue;
             }
-            String trimmed = item.trim();
+            String trimmed = item.name() != null ? item.name().trim() : "";
             if (trimmed.isEmpty()) {
                 continue;
             }
@@ -220,13 +234,119 @@ public final class ProfileExtensionsSupport {
             if (!uniqueKeys.add(key)) {
                 continue;
             }
-            result.add(canonical);
+            String level = normalizeLanguageLevel(item.level());
+            result.add(new ProfileSpokenLanguageDto(canonical, level));
             if (result.size() > MAX_SPOKEN_LANGUAGES) {
                 throw new BusinessException("TOO_MANY_LANGUAGES",
                         "A maximum of " + MAX_SPOKEN_LANGUAGES + " languages is allowed.");
             }
         }
         return List.copyOf(result);
+    }
+
+    public static String spokenLanguagesLegacyLabel(List<ProfileSpokenLanguageDto> spoken) {
+        if (spoken == null || spoken.isEmpty()) {
+            return null;
+        }
+        return spoken.stream()
+                .map(ProfileSpokenLanguageDto::name)
+                .filter(name -> name != null && !name.isBlank())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse(null);
+    }
+
+    private static String normalizeLanguageLevel(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String level = raw.trim().toLowerCase(Locale.ROOT);
+        if (!ALLOWED_LANGUAGE_LEVELS.contains(level)) {
+            throw new BusinessException("LANGUAGE_LEVEL_INVALID",
+                    "Language level must be one of: beginner, intermediate, advanced, expert.");
+        }
+        return level;
+    }
+
+    public static List<String> normalizeAboutStringList(
+            List<String> raw,
+            int maxItems,
+            int maxLength,
+            String codePrefix
+    ) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        if (raw.size() > maxItems) {
+            throw new BusinessException(
+                    "TOO_MANY_" + codePrefix,
+                    "A maximum of " + maxItems + " items is allowed.");
+        }
+        List<String> normalized = new ArrayList<>();
+        for (String item : raw) {
+            String value = blankToNull(item);
+            if (value == null) {
+                continue;
+            }
+            if (value.length() > maxLength) {
+                throw new BusinessException(
+                        codePrefix + "_TOO_LONG",
+                        "Each item must be at most " + maxLength + " characters.");
+            }
+            normalized.add(value);
+            if (normalized.size() > maxItems) {
+                throw new BusinessException(
+                        "TOO_MANY_" + codePrefix,
+                        "A maximum of " + maxItems + " items is allowed.");
+            }
+        }
+        return List.copyOf(normalized);
+    }
+
+    public static List<ProfileEducationEntryDto> normalizeAboutEducationEntries(
+            List<ProfileEducationEntryDto> raw
+    ) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        if (raw.size() > MAX_ABOUT_EDUCATION) {
+            throw new BusinessException("TOO_MANY_ABOUT_EDUCATION",
+                    "A maximum of " + MAX_ABOUT_EDUCATION + " education entries is allowed.");
+        }
+        List<ProfileEducationEntryDto> normalized = new ArrayList<>();
+        for (int i = 0; i < raw.size(); i++) {
+            ProfileEducationEntryDto item = raw.get(i);
+            if (item == null) {
+                continue;
+            }
+            String schoolYear = blankToNull(item.schoolYear());
+            String title = blankToNull(item.title());
+            String institution = blankToNull(item.institution());
+            if (schoolYear == null && title == null && institution == null) {
+                continue;
+            }
+            if (schoolYear != null && schoolYear.length() > MAX_ABOUT_EDUCATION_SCHOOL_YEAR) {
+                throw new BusinessException("ABOUT_EDUCATION_SCHOOL_YEAR_TOO_LONG",
+                        "School year must be at most " + MAX_ABOUT_EDUCATION_SCHOOL_YEAR + " characters.");
+            }
+            if (title != null && title.length() > MAX_ABOUT_EDUCATION_TITLE) {
+                throw new BusinessException("ABOUT_EDUCATION_TITLE_TOO_LONG",
+                        "Education title must be at most " + MAX_ABOUT_EDUCATION_TITLE + " characters.");
+            }
+            if (institution != null && institution.length() > MAX_ABOUT_EDUCATION_INSTITUTION) {
+                throw new BusinessException("ABOUT_EDUCATION_INSTITUTION_TOO_LONG",
+                        "Education institution must be at most "
+                                + MAX_ABOUT_EDUCATION_INSTITUTION + " characters.");
+            }
+            UUID id = item.id() != null ? item.id() : UUID.randomUUID();
+            int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
+            normalized.add(new ProfileEducationEntryDto(id, sortOrder, schoolYear, title, institution));
+            if (normalized.size() > MAX_ABOUT_EDUCATION) {
+                throw new BusinessException("TOO_MANY_ABOUT_EDUCATION",
+                        "A maximum of " + MAX_ABOUT_EDUCATION + " education entries is allowed.");
+            }
+        }
+        normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
+        return List.copyOf(normalized);
     }
 
     public static List<FaqItemDto> normalizeFaqItems(List<FaqItemDto> raw) {
@@ -944,6 +1064,10 @@ public final class ProfileExtensionsSupport {
     }
 
     public static List<ProfileLinkDto> normalizeLinks(List<ProfileLinkDto> raw) {
+        return normalizeLinks(raw, null);
+    }
+
+    public static List<ProfileLinkDto> normalizeLinks(List<ProfileLinkDto> raw, UUID userId) {
         if (raw == null || raw.isEmpty()) {
             return List.of();
         }
@@ -974,9 +1098,21 @@ public final class ProfileExtensionsSupport {
                         "Link labels must be at most " + MAX_LINK_LABEL + " characters.");
             }
             String platform = blankToNull(item.platform());
+            String iconUrl = blankToNull(item.iconUrl());
+            if (iconUrl != null) {
+                if (iconUrl.length() > MAX_LINK_URL) {
+                    throw new BusinessException("LINK_ICON_URL_TOO_LONG",
+                            "Link icon URLs must be at most " + MAX_LINK_URL + " characters.");
+                }
+                if (userId != null) {
+                    validateGalleryMediaUrl(iconUrl, userId);
+                } else {
+                    validateSafeUrl(iconUrl);
+                }
+            }
             UUID id = item.id() != null ? item.id() : UUID.randomUUID();
             int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
-            normalized.add(new ProfileLinkDto(id, type, label, url, sortOrder, platform));
+            normalized.add(new ProfileLinkDto(id, type, label, url, sortOrder, platform, iconUrl));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);

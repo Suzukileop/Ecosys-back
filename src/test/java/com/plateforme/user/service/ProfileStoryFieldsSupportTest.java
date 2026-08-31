@@ -12,8 +12,10 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProfileStoryFieldsSupportTest {
 
@@ -231,6 +233,17 @@ class ProfileStoryFieldsSupportTest {
     assertEquals("Client NDAs apply", block.remarks());
     assertEquals("Remote", block.location());
     assertEquals("FREELANCE", block.employmentType());
+  }
+
+  @Test
+  @DisplayName("hasProfileStack detects named stack items")
+  void hasProfileStack_detectsNamedItems() {
+    assertFalse(ProfileStoryFieldsSupport.hasProfileStack(null));
+    assertFalse(ProfileStoryFieldsSupport.hasProfileStack(List.of()));
+    assertFalse(ProfileStoryFieldsSupport.hasProfileStack(
+        List.of(new ProfileStrengthToolDto(" ", null))));
+    assertTrue(ProfileStoryFieldsSupport.hasProfileStack(
+        List.of(new ProfileStrengthToolDto("React", null))));
   }
 
   @Test

@@ -15,16 +15,21 @@ public record ContactVisibilitySettings(
         ContactVisibilityLevel social,
         ContactVisibilityLevel languages,
         ContactVisibilityLevel cta,
-        ContactVisibilityLevel whyMe,
         ContactVisibilityLevel experience,
         ContactVisibilityLevel yearsOfExperience,
         ContactVisibilityLevel strengthsTools,
+        ContactVisibilityLevel profileStack,
         ContactVisibilityLevel services,
         ContactVisibilityLevel faq,
         ContactVisibilityLevel links,
         ContactVisibilityLevel gender,
         ContactVisibilityLevel spokenLanguages,
-        ContactVisibilityLevel responseTime
+        ContactVisibilityLevel responseTime,
+        ContactVisibilityLevel aboutSkills,
+        ContactVisibilityLevel aboutStrengths,
+        ContactVisibilityLevel aboutSystemsTools,
+        ContactVisibilityLevel aboutInterests,
+        ContactVisibilityLevel aboutEducation
 ) {
     public static ContactVisibilitySettings defaults() {
         return new ContactVisibilitySettings(
@@ -33,6 +38,11 @@ public record ContactVisibilitySettings(
                 ContactVisibilityLevel.MEMBERS,
                 ContactVisibilityLevel.PUBLIC,
                 ContactVisibilityLevel.HIDDEN,
+                ContactVisibilityLevel.PUBLIC,
+                ContactVisibilityLevel.PUBLIC,
+                ContactVisibilityLevel.PUBLIC,
+                ContactVisibilityLevel.PUBLIC,
+                ContactVisibilityLevel.PUBLIC,
                 ContactVisibilityLevel.PUBLIC,
                 ContactVisibilityLevel.PUBLIC,
                 ContactVisibilityLevel.PUBLIC,
@@ -60,16 +70,21 @@ public record ContactVisibilitySettings(
                 + "\"social\":\"PUBLIC\","
                 + "\"languages\":\"PUBLIC\","
                 + "\"cta\":\"PUBLIC\","
-                + "\"whyMe\":\"PUBLIC\","
                 + "\"experience\":\"PUBLIC\","
                 + "\"yearsOfExperience\":\"PUBLIC\","
                 + "\"strengthsTools\":\"PUBLIC\","
+                + "\"profileStack\":\"PUBLIC\","
                 + "\"services\":\"PUBLIC\","
                 + "\"faq\":\"PUBLIC\","
                 + "\"links\":\"PUBLIC\","
                 + "\"gender\":\"PUBLIC\","
                 + "\"spokenLanguages\":\"PUBLIC\","
-                + "\"responseTime\":\"PUBLIC\""
+                + "\"responseTime\":\"PUBLIC\","
+                + "\"aboutSkills\":\"PUBLIC\","
+                + "\"aboutStrengths\":\"PUBLIC\","
+                + "\"aboutSystemsTools\":\"PUBLIC\","
+                + "\"aboutInterests\":\"PUBLIC\","
+                + "\"aboutEducation\":\"PUBLIC\""
                 + "}";
     }
 
@@ -89,16 +104,21 @@ public record ContactVisibilitySettings(
                     level(root, "social", defaults.social()),
                     level(root, "languages", defaults.languages()),
                     level(root, "cta", defaults.cta()),
-                    level(root, "whyMe", defaults.whyMe()),
                     level(root, "experience", defaults.experience()),
                     level(root, "yearsOfExperience", defaults.yearsOfExperience()),
                     level(root, "strengthsTools", defaults.strengthsTools()),
+                    level(root, "profileStack", defaults.profileStack()),
                     level(root, "services", defaults.services()),
                     level(root, "faq", defaults.faq()),
                     level(root, "links", defaults.links()),
                     levelWithLegacy(root, "gender", "pronouns", defaults.gender()),
                     level(root, "spokenLanguages", defaults.spokenLanguages()),
-                    level(root, "responseTime", defaults.responseTime())
+                    level(root, "responseTime", defaults.responseTime()),
+                    level(root, "aboutSkills", defaults.aboutSkills()),
+                    level(root, "aboutStrengths", defaults.aboutStrengths()),
+                    level(root, "aboutSystemsTools", defaults.aboutSystemsTools()),
+                    level(root, "aboutInterests", defaults.aboutInterests()),
+                    level(root, "aboutEducation", defaults.aboutEducation())
             );
         } catch (Exception e) {
             return defaults;
@@ -134,16 +154,21 @@ public record ContactVisibilitySettings(
             payload.put("social", social.name());
             payload.put("languages", languages.name());
             payload.put("cta", cta.name());
-            payload.put("whyMe", whyMe.name());
             payload.put("experience", experience.name());
             payload.put("yearsOfExperience", yearsOfExperience.name());
             payload.put("strengthsTools", strengthsTools.name());
+            payload.put("profileStack", profileStack.name());
             payload.put("services", services.name());
             payload.put("faq", faq.name());
             payload.put("links", links.name());
             payload.put("gender", gender.name());
             payload.put("spokenLanguages", spokenLanguages.name());
             payload.put("responseTime", responseTime.name());
+            payload.put("aboutSkills", aboutSkills.name());
+            payload.put("aboutStrengths", aboutStrengths.name());
+            payload.put("aboutSystemsTools", aboutSystemsTools.name());
+            payload.put("aboutInterests", aboutInterests.name());
+            payload.put("aboutEducation", aboutEducation.name());
             return mapper.writeValueAsString(payload);
         } catch (Exception e) {
             return null;

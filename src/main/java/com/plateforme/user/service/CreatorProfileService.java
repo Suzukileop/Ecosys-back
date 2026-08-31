@@ -6,11 +6,13 @@ import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.CreatorProfileDto;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
+import com.plateforme.user.dto.ProfileEducationEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import com.plateforme.user.dto.UpdateCreatorProfileDto;
@@ -107,10 +109,6 @@ public class CreatorProfileService {
             profile.setShopCoverUrl(coverUrl.isEmpty() ? null : coverUrl);
         }
 
-        if (dto.whyMeBlocks() != null) {
-            profile.setWhyMeBlocks(new ArrayList<>(
-                    ProfileStoryFieldsSupport.normalizeWhyMeBlocks(dto.whyMeBlocks(), userId)));
-        }
         if (dto.experienceBlocks() != null) {
             profile.setExperienceBlocks(new ArrayList<>(
                     ProfileStoryFieldsSupport.normalizeBlocks(dto.experienceBlocks(), userId)));
@@ -124,6 +122,10 @@ public class CreatorProfileService {
                             userId,
                             profile.getSpecialties())));
         }
+        if (dto.profileStack() != null) {
+            profile.setProfileStack(new ArrayList<>(
+                    ProfileStoryFieldsSupport.normalizeStrengths(dto.profileStack(), userId)));
+        }
 
         if (dto.gender() != null) {
             profile.setGender(ProfileExtensionsSupport.normalizeGender(dto.gender()));
@@ -135,7 +137,7 @@ public class CreatorProfileService {
             profile.setAppRole(ProfileExtensionsSupport.normalizeAppRole(dto.appRole()));
         }
         if (dto.spokenLanguages() != null || dto.languages() != null) {
-            List<String> merged = ProfileLinksLegacySync.mergeSpokenLanguages(
+            List<ProfileSpokenLanguageDto> merged = ProfileLinksLegacySync.mergeSpokenLanguages(
                     dto.spokenLanguages(), dto.languages());
             profile.setSpokenLanguages(new ArrayList<>(
                     ProfileExtensionsSupport.normalizeSpokenLanguages(merged)));
@@ -159,8 +161,40 @@ public class CreatorProfileService {
         if (dto.aboutUs() != null) {
             profile.setAboutUs(ProfileExtensionsSupport.normalizeAboutUs(dto.aboutUs(), userId));
         }
+        if (dto.aboutSkills() != null) {
+            profile.setAboutSkills(new ArrayList<>(ProfileExtensionsSupport.normalizeAboutStringList(
+                    dto.aboutSkills(),
+                    ProfileExtensionsSupport.MAX_ABOUT_SKILLS,
+                    ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                    "ABOUT_SKILLS")));
+        }
+        if (dto.aboutStrengths() != null) {
+            profile.setAboutStrengths(new ArrayList<>(ProfileExtensionsSupport.normalizeAboutStringList(
+                    dto.aboutStrengths(),
+                    ProfileExtensionsSupport.MAX_ABOUT_STRENGTHS,
+                    ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                    "ABOUT_STRENGTHS")));
+        }
+        if (dto.aboutSystemsTools() != null) {
+            profile.setAboutSystemsTools(new ArrayList<>(ProfileExtensionsSupport.normalizeAboutStringList(
+                    dto.aboutSystemsTools(),
+                    ProfileExtensionsSupport.MAX_ABOUT_SYSTEMS_TOOLS,
+                    ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                    "ABOUT_SYSTEMS_TOOLS")));
+        }
+        if (dto.aboutInterests() != null) {
+            profile.setAboutInterests(new ArrayList<>(ProfileExtensionsSupport.normalizeAboutStringList(
+                    dto.aboutInterests(),
+                    ProfileExtensionsSupport.MAX_ABOUT_INTERESTS,
+                    ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                    "ABOUT_INTERESTS")));
+        }
+        if (dto.aboutEducation() != null) {
+            profile.setAboutEducation(new ArrayList<>(
+                    ProfileExtensionsSupport.normalizeAboutEducationEntries(dto.aboutEducation())));
+        }
 
-        applyProfileLinks(profile, dto);
+        applyProfileLinks(profile, dto, userId);
         applyLocation(profile, dto);
 
         if (dto.profileServices() != null) {
@@ -262,10 +296,10 @@ public class CreatorProfileService {
         }
     }
 
-    private void applyProfileLinks(CreatorProfile profile, UpdateCreatorProfileDto dto) {
+    private void applyProfileLinks(CreatorProfile profile, UpdateCreatorProfileDto dto, UUID userId) {
         if (dto.profileLinks() != null) {
             profile.setProfileLinks(new ArrayList<>(
-                    ProfileExtensionsSupport.normalizeLinks(dto.profileLinks())));
+                    ProfileExtensionsSupport.normalizeLinks(dto.profileLinks(), userId)));
             return;
         }
         boolean legacyTouched = dto.websiteUrl() != null || dto.socialLinks() != null
@@ -280,7 +314,7 @@ public class CreatorProfileService {
                 dto.ctaLabel() != null ? dto.ctaLabel() : profile.getCtaLabel(),
                 dto.ctaUrl() != null ? dto.ctaUrl() : profile.getCtaUrl(),
                 objectMapper);
-        profile.setProfileLinks(new ArrayList<>(ProfileExtensionsSupport.normalizeLinks(merged)));
+        profile.setProfileLinks(new ArrayList<>(ProfileExtensionsSupport.normalizeLinks(merged, userId)));
     }
 
     private void applyLocation(CreatorProfile profile, UpdateCreatorProfileDto dto) {
@@ -327,7 +361,7 @@ public class CreatorProfileService {
 
     private CreatorProfileDto toDto(CreatorProfile p, User user, long portfolioCount) {
         List<ProfileLinkDto> links = safeLinks(p.getProfileLinks());
-        List<String> spoken = safeSpoken(p.getSpokenLanguages());
+        List<ProfileSpokenLanguageDto> spoken = safeSpoken(p.getSpokenLanguages());
         String responseLabel = CreatorResponseTimeService.resolveResponseTimeLabel(
                 p.getTypicalResponseTime(),
                 p.getAvgResponseTimeSeconds(),
@@ -382,10 +416,10 @@ public class CreatorProfileService {
                 p.getShopSellingFocus(),
                 p.getShopDescription(),
                 p.getShopCoverUrl(),
-                ProfileStoryFieldsSupport.stripWhyMeMedia(safeBlocks(p.getWhyMeBlocks())),
                 safeBlocks(p.getExperienceBlocks()),
                 p.getYearsOfExperience(),
                 safeStrengths(p.getStrengthsToolsMastered()),
+                safeStrengths(p.getProfileStack()),
                 creatorReviewService.getReputation(user.getId(), 5),
                 creatorProfileVisitRepository.countByCreatorUserId(user.getId()),
                 p.getGender(),
@@ -398,6 +432,11 @@ public class CreatorProfileService {
                 safeGalleryItems(p.getGalleryItems()),
                 safePortfolioWorks(p.getPortfolioWorks()),
                 p.getAboutUs(),
+                safeStringList(p.getAboutSkills()),
+                safeStringList(p.getAboutStrengths()),
+                safeStringList(p.getAboutSystemsTools()),
+                safeStringList(p.getAboutInterests()),
+                safeAboutEducation(p.getAboutEducation()),
                 links,
                 user.getCreatedAt(),
                 responseLabel,
@@ -444,7 +483,7 @@ public class CreatorProfileService {
         return strengths != null ? strengths : List.of();
     }
 
-    private static List<String> safeSpoken(List<String> spoken) {
+    private static List<ProfileSpokenLanguageDto> safeSpoken(List<ProfileSpokenLanguageDto> spoken) {
         return spoken != null ? spoken : List.of();
     }
 
@@ -470,5 +509,14 @@ public class CreatorProfileService {
 
     private static List<ProfileLinkDto> safeLinks(List<ProfileLinkDto> links) {
         return links != null ? links : List.of();
+    }
+
+    private static List<String> safeStringList(List<String> values) {
+        return values != null ? values : List.of();
+    }
+
+    private static List<ProfileEducationEntryDto> safeAboutEducation(
+            List<ProfileEducationEntryDto> entries) {
+        return entries != null ? entries : List.of();
     }
 }

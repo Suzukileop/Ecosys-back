@@ -8,7 +8,8 @@ public record ProfileLinkDto(
         String label,
         String url,
         int sortOrder,
-        String platform
+        String platform,
+        String iconUrl
 ) {
     public ProfileLinkDto {
         type = type != null ? type.trim().toUpperCase() : "CUSTOM";

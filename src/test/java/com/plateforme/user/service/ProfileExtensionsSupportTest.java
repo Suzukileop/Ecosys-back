@@ -4,11 +4,13 @@ import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileAboutUsFounderDto;
+import com.plateforme.user.dto.ProfileEducationEntryDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import com.plateforme.user.dto.ProfileTeamSocialLinkDto;
 import org.junit.jupiter.api.DisplayName;
@@ -54,17 +56,29 @@ class ProfileExtensionsSupportTest {
         assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeLinks(tooMany));
 
         assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeLinks(List.of(
-                new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site", "javascript:alert(1)", 0, null)
+                new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site", "javascript:alert(1)", 0, null, null)
         )));
     }
 
     @Test
     @DisplayName("normalizeSpokenLanguages deduplicates case and accent variants")
     void normalizeSpokenLanguages_dedupes() {
-        List<String> result = ProfileExtensionsSupport.normalizeSpokenLanguages(
-                List.of(" Français ", "Français", "FRANCAIS", "English", " english ")
+        List<ProfileSpokenLanguageDto> result = ProfileExtensionsSupport.normalizeSpokenLanguages(
+                List.of(
+                        new ProfileSpokenLanguageDto(" Français ", null),
+                        new ProfileSpokenLanguageDto("Français", null),
+                        new ProfileSpokenLanguageDto("FRANCAIS", null),
+                        new ProfileSpokenLanguageDto("English", "expert"),
+                        new ProfileSpokenLanguageDto(" english ", "beginner")
+                )
         );
-        assertEquals(List.of("Français", "English"), result);
+        assertEquals(
+                List.of(
+                        new ProfileSpokenLanguageDto("Français", null),
+                        new ProfileSpokenLanguageDto("English", "expert")
+                ),
+                result
+        );
     }
 
     @Test
@@ -382,6 +396,56 @@ class ProfileExtensionsSupportTest {
         assertNotNull(synthesized.getFirst().id());
     }
 
+    @Test
+    @DisplayName("normalizeAboutStringList trims, skips blanks and enforces limits")
+    void normalizeAboutStringList_happyPathAndLimits() {
+        List<String> result = ProfileExtensionsSupport.normalizeAboutStringList(
+                List.of("  React  ", " ", "TypeScript"),
+                ProfileExtensionsSupport.MAX_ABOUT_SKILLS,
+                ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                "ABOUT_SKILLS");
+        assertEquals(List.of("React", "TypeScript"), result);
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutStringList(
+                Collections.nCopies(13, "Skill"),
+                ProfileExtensionsSupport.MAX_ABOUT_SKILLS,
+                ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                "ABOUT_SKILLS"));
+
+        String tooLong = "x".repeat(ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH + 1);
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutStringList(
+                List.of(tooLong),
+                ProfileExtensionsSupport.MAX_ABOUT_SKILLS,
+                ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
+                "ABOUT_SKILLS"));
+    }
+
+    @Test
+    @DisplayName("normalizeAboutEducationEntries assigns ids, sorts and enforces max 8")
+    void normalizeAboutEducationEntries_happyPathAndLimits() {
+        ProfileEducationEntryDto second = new ProfileEducationEntryDto(
+                null, 2, " 2017 — 2019 ", "  MSc Design  ", "  ENSAD  ");
+        ProfileEducationEntryDto first = new ProfileEducationEntryDto(
+                UUID.randomUUID(), 1, "2014 — 2016", "BA", "University");
+
+        List<ProfileEducationEntryDto> result =
+                ProfileExtensionsSupport.normalizeAboutEducationEntries(List.of(second, first));
+
+        assertEquals(2, result.size());
+        assertEquals("BA", result.getFirst().title());
+        assertEquals("2017 — 2019", result.get(1).schoolYear());
+        assertEquals("MSc Design", result.get(1).title());
+        assertEquals("ENSAD", result.get(1).institution());
+        assertNotNull(result.get(1).id());
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutEducationEntries(
+                Collections.nCopies(9, new ProfileEducationEntryDto(null, 0, null, "Title", null))));
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutEducationEntries(
+                List.of(new ProfileEducationEntryDto(
+                        null, 0, "x".repeat(41), null, null))));
+    }
+
     private static FaqItemDto faq(int order) {
         return new FaqItemDto(UUID.randomUUID(), order, "Q" + order, "A" + order);
     }
@@ -392,6 +456,6 @@ class ProfileExtensionsSupportTest {
 
     private static ProfileLinkDto link(int order) {
         return new ProfileLinkDto(
-                UUID.randomUUID(), "CUSTOM", "Link " + order, "https://example.com/" + order, order, null);
+                UUID.randomUUID(), "CUSTOM", "Link " + order, "https://example.com/" + order, order, null, null);
     }
 }

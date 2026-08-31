@@ -3,12 +3,14 @@ package com.plateforme.user.entity;
 import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
+import com.plateforme.user.dto.ProfileEducationEntryDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import jakarta.persistence.*;
@@ -100,7 +102,7 @@ public class CreatorProfile {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "spoken_languages", columnDefinition = "jsonb", nullable = false)
-    private List<String> spokenLanguages = new ArrayList<>();
+    private List<ProfileSpokenLanguageDto> spokenLanguages = new ArrayList<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "profile_services", columnDefinition = "jsonb", nullable = false)
@@ -213,10 +215,6 @@ public class CreatorProfile {
     private String shopCoverUrl;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "why_me_blocks", columnDefinition = "jsonb", nullable = false)
-    private List<ProfileMediaBlock> whyMeBlocks = new ArrayList<>();
-
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "experience_blocks", columnDefinition = "jsonb", nullable = false)
     private List<ProfileMediaBlock> experienceBlocks = new ArrayList<>();
 
@@ -226,6 +224,30 @@ public class CreatorProfile {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "strengths_tools_mastered", columnDefinition = "jsonb", nullable = false)
     private List<ProfileStrengthToolDto> strengthsToolsMastered = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "profile_stack", columnDefinition = "jsonb", nullable = false)
+    private List<ProfileStrengthToolDto> profileStack = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "about_skills", columnDefinition = "jsonb", nullable = false)
+    private List<String> aboutSkills = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "about_strengths", columnDefinition = "jsonb", nullable = false)
+    private List<String> aboutStrengths = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "about_systems_tools", columnDefinition = "jsonb", nullable = false)
+    private List<String> aboutSystemsTools = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "about_interests", columnDefinition = "jsonb", nullable = false)
+    private List<String> aboutInterests = new ArrayList<>();
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "about_education", columnDefinition = "jsonb", nullable = false)
+    private List<ProfileEducationEntryDto> aboutEducation = new ArrayList<>();
 
     @Column(name = "profile_visits", nullable = false)
     private Integer profileVisits = 0;

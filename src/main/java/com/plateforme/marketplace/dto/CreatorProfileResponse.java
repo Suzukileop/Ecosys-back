@@ -2,11 +2,13 @@ package com.plateforme.marketplace.dto;
 
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
+import com.plateforme.user.dto.ProfileEducationEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 
@@ -55,19 +57,24 @@ public record CreatorProfileResponse(
         String ctaLabel,
         String ctaUrl,
         String timezoneId,
-        List<ProfileMediaBlock> whyMeBlocks,
         List<ProfileMediaBlock> experienceBlocks,
         Integer yearsOfExperience,
         List<ProfileStrengthToolDto> strengthsToolsMastered,
+        List<ProfileStrengthToolDto> profileStack,
         long profileVisits,
         String gender,
-        List<String> spokenLanguages,
+        List<ProfileSpokenLanguageDto> spokenLanguages,
         List<ProfileServiceDto> profileServices,
         List<FaqItemDto> faqItems,
         List<ProfileTeamMemberDto> teamMembers,
         List<ProfileGalleryItemDto> galleryItems,
         List<ProfilePortfolioWorkDto> portfolioWorks,
         ProfileAboutUsDto aboutUs,
+        List<String> aboutSkills,
+        List<String> aboutStrengths,
+        List<String> aboutSystemsTools,
+        List<String> aboutInterests,
+        List<ProfileEducationEntryDto> aboutEducation,
         List<ProfileLinkDto> profileLinks,
         LocalDateTime memberSince,
         String responseTimeLabel,

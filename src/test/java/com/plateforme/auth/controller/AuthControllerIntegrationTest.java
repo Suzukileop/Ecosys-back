@@ -132,9 +132,9 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void logout_returns401_whenNotAuthenticated() throws Exception {
+    void logout_returns204_evenWhenNotAuthenticated() throws Exception {
         mockMvc.perform(post("/api/auth/logout")
                         .cookie(new Cookie("refresh_token", "some-refresh-token")))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isNoContent());
     }
 }

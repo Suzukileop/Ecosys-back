@@ -66,7 +66,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/creators/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/marketplace/creators/*/view").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/marketplace/creators/*/contact-messages").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/public/feedback").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reference/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/contents/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/social/reactions/counts").permitAll()

@@ -5,6 +5,7 @@ import com.plateforme.marketplace.entity.ContentPost;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
+import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,9 @@ class ContentPostServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private CreatorProfileRepository creatorProfileRepository;
 
     @InjectMocks
     private ContentPostService contentPostService;
@@ -93,7 +97,7 @@ class ContentPostServiceTest {
         post.setIsPublic(true);
         post.setViews(3);
 
-        when(contentPostRepository.findByIdAndIsPublicTrue(postId)).thenReturn(Optional.of(post));
+        when(contentPostRepository.findPublicById(postId)).thenReturn(Optional.of(post));
 
         contentPostService.incrementView(postId);
 
@@ -105,7 +109,7 @@ class ContentPostServiceTest {
     @DisplayName("getPublicPostById : contenu non public → BusinessException")
     void getPublicPostById_notFound() {
         UUID postId = UUID.randomUUID();
-        when(contentPostRepository.findByIdAndIsPublicTrue(postId)).thenReturn(Optional.empty());
+        when(contentPostRepository.findPublicById(postId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> contentPostService.getPublicPostById(postId))
                 .isInstanceOf(BusinessException.class)
@@ -141,6 +145,8 @@ class ContentPostServiceTest {
         post.setIsPublic(true);
         post.setViews(1);
         post.setLikes(2);
+
+        when(creatorProfileRepository.findByUserId(creatorId)).thenReturn(Optional.empty());
 
         var resp = contentPostService.toResponse(post, 7L);
 

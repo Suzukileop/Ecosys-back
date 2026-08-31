@@ -12,11 +12,13 @@ import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.ContactVisibilityLevel;
 import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.FaqItemDto;
+import com.plateforme.user.dto.ProfileEducationEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileMediaBlock;
 import com.plateforme.user.dto.ProfileServiceDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
 import com.plateforme.user.entity.CreatorProfile;
@@ -33,8 +35,8 @@ import com.plateforme.user.service.CreatorResponseTimeService;
 import com.plateforme.user.service.CreatorReviewService;
 import com.plateforme.user.service.ProfileExtensionsSupport;
 import com.plateforme.user.service.ProfileBioSupport;
-import com.plateforme.user.service.SpecialtyTaxonomy;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
+import com.plateforme.user.service.SpecialtyTaxonomy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -67,15 +69,20 @@ public class MarketplaceService {
             String ctaLabel,
             String ctaUrl,
             String timezoneId,
-            List<ProfileMediaBlock> whyMeBlocks,
             List<ProfileMediaBlock> experienceBlocks,
             Integer yearsOfExperience,
             List<ProfileStrengthToolDto> strengthsToolsMastered,
+            List<ProfileStrengthToolDto> profileStack,
             String gender,
-            List<String> spokenLanguages,
+            List<ProfileSpokenLanguageDto> spokenLanguages,
             List<ProfileServiceDto> profileServices,
             List<FaqItemDto> faqItems,
             List<ProfileLinkDto> profileLinks,
+            List<String> aboutSkills,
+            List<String> aboutStrengths,
+            List<String> aboutSystemsTools,
+            List<String> aboutInterests,
+            List<ProfileEducationEntryDto> aboutEducation,
             String responseTimeLabel,
             Integer responseTimeSampleCount,
             boolean membersOnlyContactAvailable
@@ -388,10 +395,10 @@ public class MarketplaceService {
                 contact.ctaLabel(),
                 contact.ctaUrl(),
                 contact.timezoneId(),
-                contact.whyMeBlocks(),
                 contact.experienceBlocks(),
                 contact.yearsOfExperience(),
                 contact.strengthsToolsMastered(),
+                contact.profileStack(),
                 creatorProfileVisitRepository.countByCreatorUserId(profile.getUser().getId()),
                 contact.gender(),
                 contact.spokenLanguages(),
@@ -401,6 +408,11 @@ public class MarketplaceService {
                 safeGalleryItems(profile.getGalleryItems()),
                 works,
                 profile.getAboutUs(),
+                contact.aboutSkills(),
+                contact.aboutStrengths(),
+                contact.aboutSystemsTools(),
+                contact.aboutInterests(),
+                contact.aboutEducation(),
                 contact.profileLinks(),
                 user.getCreatedAt(),
                 contact.responseTimeLabel(),
@@ -595,23 +607,32 @@ public class MarketplaceService {
                 ProfileExtensionsSupport.firstContactValue(profile.getContactEmails()),
                 blankToNull(profile.getContactEmail()));
         String availability = blankToNull(profile.getAvailabilityHours());
-        List<String> spoken = profile.getSpokenLanguages() != null ? profile.getSpokenLanguages() : List.of();
-        String languagesLegacy = !spoken.isEmpty()
-                ? String.join(", ", spoken)
-                : blankToNull(profile.getLanguages());
+        List<ProfileSpokenLanguageDto> spoken = profile.getSpokenLanguages() != null
+                ? profile.getSpokenLanguages() : List.of();
+        String languagesLegacy = ProfileExtensionsSupport.spokenLanguagesLegacyLabel(spoken);
+        if (languagesLegacy == null) {
+            languagesLegacy = blankToNull(profile.getLanguages());
+        }
         String ctaLabel = firstNonBlank(extractCtaLabel(allLinks), blankToNull(profile.getCtaLabel()));
         String ctaUrl = firstNonBlank(extractCtaUrl(allLinks), blankToNull(profile.getCtaUrl()));
         boolean hasCta = ctaLabel != null || ctaUrl != null;
-        List<ProfileMediaBlock> whyMeBlocks = ProfileStoryFieldsSupport.stripWhyMeMedia(
-                profile.getWhyMeBlocks() != null ? profile.getWhyMeBlocks() : List.of());
         List<ProfileMediaBlock> experienceBlocks = profile.getExperienceBlocks() != null
                 ? profile.getExperienceBlocks() : List.of();
         Integer years = profile.getYearsOfExperience();
         List<ProfileStrengthToolDto> strengths = profile.getStrengthsToolsMastered() != null
                 ? profile.getStrengthsToolsMastered() : List.of();
+        List<ProfileStrengthToolDto> profileStack = profile.getProfileStack() != null
+                ? profile.getProfileStack() : List.of();
         List<ProfileServiceDto> services = ProfileExtensionsSupport.activeServices(
                 profile.getProfileServices() != null ? profile.getProfileServices() : List.of());
         List<FaqItemDto> faq = profile.getFaqItems() != null ? profile.getFaqItems() : List.of();
+        List<String> aboutSkills = profile.getAboutSkills() != null ? profile.getAboutSkills() : List.of();
+        List<String> aboutStrengths = profile.getAboutStrengths() != null ? profile.getAboutStrengths() : List.of();
+        List<String> aboutSystemsTools = profile.getAboutSystemsTools() != null
+                ? profile.getAboutSystemsTools() : List.of();
+        List<String> aboutInterests = profile.getAboutInterests() != null ? profile.getAboutInterests() : List.of();
+        List<ProfileEducationEntryDto> aboutEducation = profile.getAboutEducation() != null
+                ? profile.getAboutEducation() : List.of();
         String gender = ProfileExtensionsSupport.normalizeGender(profile.getGender());
         String responseLabel = CreatorResponseTimeService.resolveResponseTimeLabel(
                 profile.getTypicalResponseTime(),
@@ -619,16 +640,21 @@ public class MarketplaceService {
                 profile.getResponseTimeSampleCount());
         Integer responseSampleCount = profile.getResponseTimeSampleCount();
 
-        boolean hasWhyMe = !whyMeBlocks.isEmpty();
         boolean hasExperience = !experienceBlocks.isEmpty();
         boolean hasYears = years != null;
         boolean hasStrengths = strengths.stream()
                 .anyMatch(s -> s != null && s.name() != null && !s.name().isBlank());
+        boolean hasProfileStack = ProfileStoryFieldsSupport.hasProfileStack(profileStack);
         boolean hasServices = !services.isEmpty();
         boolean hasFaq = !faq.isEmpty();
         boolean hasLinks = !allLinks.isEmpty();
         boolean hasSpoken = !spoken.isEmpty();
         boolean hasResponseTime = responseLabel != null;
+        boolean hasAboutSkills = !aboutSkills.isEmpty();
+        boolean hasAboutStrengths = !aboutStrengths.isEmpty();
+        boolean hasAboutSystemsTools = !aboutSystemsTools.isEmpty();
+        boolean hasAboutInterests = !aboutInterests.isEmpty();
+        boolean hasAboutEducation = !aboutEducation.isEmpty();
 
         boolean membersOnlyContactAvailable = !authenticated && (
                 hasMembersOnlyValue(visibility.email(), email)
@@ -638,16 +664,21 @@ public class MarketplaceService {
                         || hasMembersOnlyValue(visibility.languages(), languagesLegacy)
                         || (visibility.cta() == ContactVisibilityLevel.MEMBERS && hasCta)
                         || (visibility.social() == ContactVisibilityLevel.MEMBERS && !allSocial.isEmpty())
-                        || (visibility.whyMe() == ContactVisibilityLevel.MEMBERS && hasWhyMe)
                         || (visibility.experience() == ContactVisibilityLevel.MEMBERS && hasExperience)
                         || (visibility.yearsOfExperience() == ContactVisibilityLevel.MEMBERS && hasYears)
                         || (visibility.strengthsTools() == ContactVisibilityLevel.MEMBERS && hasStrengths)
+                        || (visibility.profileStack() == ContactVisibilityLevel.MEMBERS && hasProfileStack)
                         || (visibility.services() == ContactVisibilityLevel.MEMBERS && hasServices)
                         || (visibility.faq() == ContactVisibilityLevel.MEMBERS && hasFaq)
                         || (visibility.links() == ContactVisibilityLevel.MEMBERS && hasLinks)
                         || (visibility.gender() == ContactVisibilityLevel.MEMBERS && gender != null)
                         || (visibility.spokenLanguages() == ContactVisibilityLevel.MEMBERS && hasSpoken)
                         || (visibility.responseTime() == ContactVisibilityLevel.MEMBERS && hasResponseTime)
+                        || (visibility.aboutSkills() == ContactVisibilityLevel.MEMBERS && hasAboutSkills)
+                        || (visibility.aboutStrengths() == ContactVisibilityLevel.MEMBERS && hasAboutStrengths)
+                        || (visibility.aboutSystemsTools() == ContactVisibilityLevel.MEMBERS && hasAboutSystemsTools)
+                        || (visibility.aboutInterests() == ContactVisibilityLevel.MEMBERS && hasAboutInterests)
+                        || (visibility.aboutEducation() == ContactVisibilityLevel.MEMBERS && hasAboutEducation)
         );
 
         boolean showAvailability = visibility.availability().visibleTo(authenticated) && availability != null;
@@ -671,15 +702,21 @@ public class MarketplaceService {
                 showCta ? ctaLabel : null,
                 showCta ? ctaUrl : null,
                 showAvailability ? blankToNull(profile.getTimezoneId()) : null,
-                visibility.whyMe().visibleTo(authenticated) && hasWhyMe ? whyMeBlocks : List.of(),
                 visibility.experience().visibleTo(authenticated) && hasExperience ? experienceBlocks : List.of(),
                 visibility.yearsOfExperience().visibleTo(authenticated) && hasYears ? years : null,
                 visibility.strengthsTools().visibleTo(authenticated) && hasStrengths ? strengths : List.of(),
+                visibility.profileStack().visibleTo(authenticated) && hasProfileStack ? profileStack : List.of(),
                 visibility.gender().visibleTo(authenticated) ? gender : null,
                 visibility.spokenLanguages().visibleTo(authenticated) && hasSpoken ? spoken : List.of(),
                 visibility.services().visibleTo(authenticated) && hasServices ? services : List.of(),
                 visibility.faq().visibleTo(authenticated) && hasFaq ? faq : List.of(),
                 visibleLinks,
+                visibility.aboutSkills().visibleTo(authenticated) && hasAboutSkills ? aboutSkills : List.of(),
+                visibility.aboutStrengths().visibleTo(authenticated) && hasAboutStrengths ? aboutStrengths : List.of(),
+                visibility.aboutSystemsTools().visibleTo(authenticated) && hasAboutSystemsTools
+                        ? aboutSystemsTools : List.of(),
+                visibility.aboutInterests().visibleTo(authenticated) && hasAboutInterests ? aboutInterests : List.of(),
+                visibility.aboutEducation().visibleTo(authenticated) && hasAboutEducation ? aboutEducation : List.of(),
                 visibility.responseTime().visibleTo(authenticated) ? responseLabel : null,
                 visibility.responseTime().visibleTo(authenticated) ? responseSampleCount : null,
                 membersOnlyContactAvailable

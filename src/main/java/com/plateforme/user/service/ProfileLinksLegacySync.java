@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plateforme.marketplace.dto.SocialLink;
 import com.plateforme.marketplace.util.SocialLinksJsonParser;
 import com.plateforme.user.dto.ProfileLinkDto;
+import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.entity.CreatorProfile;
 
 import java.util.ArrayList;
@@ -29,13 +30,13 @@ final class ProfileLinksLegacySync {
         int order = 0;
         String website = blankToNull(websiteUrl);
         if (website != null) {
-            merged.add(new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site web", website, order++, null));
+            merged.add(new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site web", website, order++, null, null));
         }
         String cta = blankToNull(ctaUrl);
         if (cta != null) {
             String label = blankToNull(ctaLabel);
             merged.add(new ProfileLinkDto(
-                    UUID.randomUUID(), "CTA", label != null ? label : "Lien principal", cta, order++, null));
+                    UUID.randomUUID(), "CTA", label != null ? label : "Lien principal", cta, order++, null, null));
         }
         for (SocialLink social : SocialLinksJsonParser.parse(objectMapper, socialLinksJson)) {
             if (social.url() == null || social.url().isBlank()) {
@@ -47,7 +48,8 @@ final class ProfileLinksLegacySync {
                     blankToNull(social.platform()),
                     social.url().trim(),
                     order++,
-                    blankToNull(social.platform())));
+                    blankToNull(social.platform()),
+                    null));
         }
         return merged;
     }
@@ -90,15 +92,19 @@ final class ProfileLinksLegacySync {
             }
         }
 
-        List<String> spoken = profile.getSpokenLanguages() != null ? profile.getSpokenLanguages() : List.of();
-        if (!spoken.isEmpty()) {
-            profile.setLanguages(String.join(", ", spoken));
+        List<ProfileSpokenLanguageDto> spoken = profile.getSpokenLanguages() != null
+                ? profile.getSpokenLanguages() : List.of();
+        String legacyLabel = ProfileExtensionsSupport.spokenLanguagesLegacyLabel(spoken);
+        if (legacyLabel != null) {
+            profile.setLanguages(legacyLabel);
         } else if (profile.getLanguages() == null) {
             profile.setLanguages(null);
         }
     }
 
-    static List<String> mergeSpokenLanguages(List<String> spokenLanguages, String legacyLanguages) {
+    static List<ProfileSpokenLanguageDto> mergeSpokenLanguages(
+            List<ProfileSpokenLanguageDto> spokenLanguages,
+            String legacyLanguages) {
         if (spokenLanguages != null && !spokenLanguages.isEmpty()) {
             return spokenLanguages;
         }
@@ -109,6 +115,7 @@ final class ProfileLinksLegacySync {
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .distinct()
+                .map(ProfileSpokenLanguageDto::new)
                 .toList();
     }
 
