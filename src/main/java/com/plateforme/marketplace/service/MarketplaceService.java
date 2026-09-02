@@ -13,6 +13,7 @@ import com.plateforme.user.dto.ContactVisibilityLevel;
 import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileEducationEntryDto;
+import com.plateforme.user.dto.ProfileSkillEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
@@ -78,7 +79,7 @@ public class MarketplaceService {
             List<ProfileServiceDto> profileServices,
             List<FaqItemDto> faqItems,
             List<ProfileLinkDto> profileLinks,
-            List<String> aboutSkills,
+            List<ProfileSkillEntryDto> aboutSkills,
             List<String> aboutStrengths,
             List<String> aboutSystemsTools,
             List<String> aboutInterests,
@@ -626,7 +627,8 @@ public class MarketplaceService {
         List<ProfileServiceDto> services = ProfileExtensionsSupport.activeServices(
                 profile.getProfileServices() != null ? profile.getProfileServices() : List.of());
         List<FaqItemDto> faq = profile.getFaqItems() != null ? profile.getFaqItems() : List.of();
-        List<String> aboutSkills = profile.getAboutSkills() != null ? profile.getAboutSkills() : List.of();
+        List<ProfileSkillEntryDto> aboutSkills = profile.getAboutSkills() != null
+                ? profile.getAboutSkills() : List.of();
         List<String> aboutStrengths = profile.getAboutStrengths() != null ? profile.getAboutStrengths() : List.of();
         List<String> aboutSystemsTools = profile.getAboutSystemsTools() != null
                 ? profile.getAboutSystemsTools() : List.of();

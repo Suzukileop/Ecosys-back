@@ -3,6 +3,7 @@ package com.plateforme.marketplace.dto;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileEducationEntryDto;
+import com.plateforme.user.dto.ProfileSkillEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
@@ -70,7 +71,7 @@ public record CreatorProfileResponse(
         List<ProfileGalleryItemDto> galleryItems,
         List<ProfilePortfolioWorkDto> portfolioWorks,
         ProfileAboutUsDto aboutUs,
-        List<String> aboutSkills,
+        List<ProfileSkillEntryDto> aboutSkills,
         List<String> aboutStrengths,
         List<String> aboutSystemsTools,
         List<String> aboutInterests,

@@ -6,6 +6,7 @@ import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileAboutUsFounderDto;
 import com.plateforme.user.dto.ProfileEducationEntryDto;
+import com.plateforme.user.dto.ProfileSkillEntryDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -80,6 +81,8 @@ public final class ProfileExtensionsSupport {
     static final int MAX_ABOUT_SYSTEMS_TOOLS = 16;
     static final int MAX_ABOUT_INTERESTS = 12;
     static final int MAX_ABOUT_STRING_LENGTH = 120;
+    static final int MAX_ABOUT_SKILL_TITLE = 120;
+    static final int MAX_ABOUT_SKILL_DESCRIPTION = 280;
     static final int MAX_ABOUT_EDUCATION = 8;
     static final int MAX_ABOUT_EDUCATION_SCHOOL_YEAR = 40;
     static final int MAX_ABOUT_EDUCATION_TITLE = 150;
@@ -343,6 +346,52 @@ public final class ProfileExtensionsSupport {
             if (normalized.size() > MAX_ABOUT_EDUCATION) {
                 throw new BusinessException("TOO_MANY_ABOUT_EDUCATION",
                         "A maximum of " + MAX_ABOUT_EDUCATION + " education entries is allowed.");
+            }
+        }
+        normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
+        return List.copyOf(normalized);
+    }
+
+    public static List<ProfileSkillEntryDto> normalizeAboutSkillEntries(
+            List<ProfileSkillEntryDto> raw
+    ) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        if (raw.size() > MAX_ABOUT_SKILLS) {
+            throw new BusinessException("TOO_MANY_ABOUT_SKILLS",
+                    "A maximum of " + MAX_ABOUT_SKILLS + " skills is allowed.");
+        }
+        List<ProfileSkillEntryDto> normalized = new ArrayList<>();
+        for (int i = 0; i < raw.size(); i++) {
+            ProfileSkillEntryDto item = raw.get(i);
+            if (item == null) {
+                continue;
+            }
+            String title = blankToNull(item.title());
+            String description = blankToNull(item.description());
+            if (title == null && description == null) {
+                continue;
+            }
+            if (title == null) {
+                throw new BusinessException("ABOUT_SKILL_TITLE_REQUIRED",
+                        "Each skill needs a title.");
+            }
+            if (title.length() > MAX_ABOUT_SKILL_TITLE) {
+                throw new BusinessException("ABOUT_SKILL_TITLE_TOO_LONG",
+                        "Skill title must be at most " + MAX_ABOUT_SKILL_TITLE + " characters.");
+            }
+            if (description != null && description.length() > MAX_ABOUT_SKILL_DESCRIPTION) {
+                throw new BusinessException("ABOUT_SKILL_DESCRIPTION_TOO_LONG",
+                        "Skill description must be at most "
+                                + MAX_ABOUT_SKILL_DESCRIPTION + " characters.");
+            }
+            UUID id = item.id() != null ? item.id() : UUID.randomUUID();
+            int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
+            normalized.add(new ProfileSkillEntryDto(id, sortOrder, title, description));
+            if (normalized.size() > MAX_ABOUT_SKILLS) {
+                throw new BusinessException("TOO_MANY_ABOUT_SKILLS",
+                        "A maximum of " + MAX_ABOUT_SKILLS + " skills is allowed.");
             }
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));

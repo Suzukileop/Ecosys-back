@@ -60,7 +60,7 @@ public record CreatorProfileDto(
         List<ProfileGalleryItemDto> galleryItems,
         List<ProfilePortfolioWorkDto> portfolioWorks,
         ProfileAboutUsDto aboutUs,
-        List<String> aboutSkills,
+        List<ProfileSkillEntryDto> aboutSkills,
         List<String> aboutStrengths,
         List<String> aboutSystemsTools,
         List<String> aboutInterests,

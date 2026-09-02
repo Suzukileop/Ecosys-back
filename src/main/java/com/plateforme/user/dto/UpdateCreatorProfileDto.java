@@ -148,8 +148,9 @@ public record UpdateCreatorProfileDto(
         @Valid
         ProfileAboutUsDto aboutUs,
 
+        @Valid
         @Size(max = 12)
-        List<String> aboutSkills,
+        List<ProfileSkillEntryDto> aboutSkills,
 
         @Size(max = 12)
         List<String> aboutStrengths,

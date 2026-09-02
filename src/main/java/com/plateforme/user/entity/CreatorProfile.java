@@ -4,6 +4,7 @@ import com.plateforme.user.dto.ContactVisibilitySettings;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileEducationEntryDto;
+import com.plateforme.user.dto.ProfileSkillEntryDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -231,7 +232,7 @@ public class CreatorProfile {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "about_skills", columnDefinition = "jsonb", nullable = false)
-    private List<String> aboutSkills = new ArrayList<>();
+    private List<ProfileSkillEntryDto> aboutSkills = new ArrayList<>();
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "about_strengths", columnDefinition = "jsonb", nullable = false)

@@ -7,6 +7,7 @@ import com.plateforme.user.dto.CreatorProfileDto;
 import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileEducationEntryDto;
+import com.plateforme.user.dto.ProfileSkillEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfilePortfolioWorkDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -162,11 +163,8 @@ public class CreatorProfileService {
             profile.setAboutUs(ProfileExtensionsSupport.normalizeAboutUs(dto.aboutUs(), userId));
         }
         if (dto.aboutSkills() != null) {
-            profile.setAboutSkills(new ArrayList<>(ProfileExtensionsSupport.normalizeAboutStringList(
-                    dto.aboutSkills(),
-                    ProfileExtensionsSupport.MAX_ABOUT_SKILLS,
-                    ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
-                    "ABOUT_SKILLS")));
+            profile.setAboutSkills(new ArrayList<>(
+                    ProfileExtensionsSupport.normalizeAboutSkillEntries(dto.aboutSkills())));
         }
         if (dto.aboutStrengths() != null) {
             profile.setAboutStrengths(new ArrayList<>(ProfileExtensionsSupport.normalizeAboutStringList(
@@ -432,7 +430,7 @@ public class CreatorProfileService {
                 safeGalleryItems(p.getGalleryItems()),
                 safePortfolioWorks(p.getPortfolioWorks()),
                 p.getAboutUs(),
-                safeStringList(p.getAboutSkills()),
+                safeAboutSkills(p.getAboutSkills()),
                 safeStringList(p.getAboutStrengths()),
                 safeStringList(p.getAboutSystemsTools()),
                 safeStringList(p.getAboutInterests()),
@@ -513,6 +511,11 @@ public class CreatorProfileService {
 
     private static List<String> safeStringList(List<String> values) {
         return values != null ? values : List.of();
+    }
+
+    private static List<ProfileSkillEntryDto> safeAboutSkills(
+            List<ProfileSkillEntryDto> entries) {
+        return entries != null ? entries : List.of();
     }
 
     private static List<ProfileEducationEntryDto> safeAboutEducation(

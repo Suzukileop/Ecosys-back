@@ -5,6 +5,7 @@ import com.plateforme.user.dto.FaqItemDto;
 import com.plateforme.user.dto.ProfileAboutUsDto;
 import com.plateforme.user.dto.ProfileAboutUsFounderDto;
 import com.plateforme.user.dto.ProfileEducationEntryDto;
+import com.plateforme.user.dto.ProfileSkillEntryDto;
 import com.plateforme.user.dto.ProfileContactEntryDto;
 import com.plateforme.user.dto.ProfileGalleryItemDto;
 import com.plateforme.user.dto.ProfileLinkDto;
@@ -418,6 +419,30 @@ class ProfileExtensionsSupportTest {
                 ProfileExtensionsSupport.MAX_ABOUT_SKILLS,
                 ProfileExtensionsSupport.MAX_ABOUT_STRING_LENGTH,
                 "ABOUT_SKILLS"));
+    }
+
+    @Test
+    @DisplayName("normalizeAboutSkillEntries assigns ids, sorts and enforces limits")
+    void normalizeAboutSkillEntries_happyPathAndLimits() {
+        ProfileSkillEntryDto second = new ProfileSkillEntryDto(
+                null, 2, " APIs ", " REST & GraphQL ");
+        ProfileSkillEntryDto first = new ProfileSkillEntryDto(
+                UUID.randomUUID(), 1, "Web apps", null);
+
+        List<ProfileSkillEntryDto> result =
+                ProfileExtensionsSupport.normalizeAboutSkillEntries(List.of(second, first));
+
+        assertEquals(2, result.size());
+        assertEquals("Web apps", result.getFirst().title());
+        assertEquals("APIs", result.get(1).title());
+        assertEquals("REST & GraphQL", result.get(1).description());
+        assertNotNull(result.get(1).id());
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutSkillEntries(
+                Collections.nCopies(13, new ProfileSkillEntryDto(null, 0, "Skill", null))));
+
+        assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeAboutSkillEntries(
+                List.of(new ProfileSkillEntryDto(null, 0, null, "Only description"))));
     }
 
     @Test
