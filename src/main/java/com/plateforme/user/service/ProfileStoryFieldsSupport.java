@@ -41,7 +41,6 @@ public final class ProfileStoryFieldsSupport {
     static final int MAX_LINKS_PER_BLOCK = 5;
     static final int MAX_LINK_LABEL = 100;
     static final int MAX_LINK_URL = 500;
-    static final int MAX_REMARKS_LENGTH = 500;
     static final int MAX_LOCATION_LENGTH = 120;
 
     private static final Set<String> ALLOWED_STATUS = Set.of("ONGOING", "FINISHED");
@@ -98,19 +97,16 @@ public final class ProfileStoryFieldsSupport {
             String organization = normalizeOptionalLabel(
                     block.organization(), MAX_ORGANIZATION_LENGTH, "ORGANIZATION_TOO_LONG", "Organization");
             String period = normalizePeriod(block.period());
-            List<String> subtitles = normalizeSubtitles(block.subtitles());
             String status = normalizeStatus(block.status());
             List<String> tasks = normalizeTasks(block.tasks());
             List<ProfileToolRefDto> tools = normalizeTools(block.tools(), userId);
             List<ExperienceProofLink> links = normalizeProofLinks(block.links());
-            String remarks = normalizeOptionalLabel(
-                    block.remarks(), MAX_REMARKS_LENGTH, "REMARKS_TOO_LONG", "Remarks");
             String location = normalizeOptionalLabel(
                     block.location(), MAX_LOCATION_LENGTH, "LOCATION_TOO_LONG", "Location");
             String employmentType = normalizeEmploymentType(block.employmentType());
             normalized.add(new ProfileMediaBlock(
-                    id, sortOrder, title, organization, text, mediaUrl, mediaType, period, subtitles,
-                    status, tasks, tools, links, remarks, location, employmentType));
+                    id, sortOrder, title, organization, text, mediaUrl, mediaType, period,
+                    status, tasks, tools, links, location, employmentType));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);

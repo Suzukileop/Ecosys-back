@@ -146,16 +146,6 @@ class ProfileStoryFieldsSupportTest {
   }
 
   @Test
-  @DisplayName("normalizeBlocks preserves subtitles")
-  void normalizeBlocks_preservesSubtitles() {
-    List<ProfileMediaBlock> result = ProfileStoryFieldsSupport.normalizeBlocks(
-        List.of(new ProfileMediaBlock(UUID.randomUUID(), 0, "Title", null, null, List.of("Line one", "Line two"))),
-        USER_ID
-    );
-    assertEquals(List.of("Line one", "Line two"), result.get(0).subtitles());
-  }
-
-  @Test
   @DisplayName("normalizePeriod trims, blank to null, and enforces max length")
   void normalizePeriod_trimsAndValidates() {
     assertEquals("2020-2023", ProfileStoryFieldsSupport.normalizePeriod(" 2020-2023 "));
@@ -174,7 +164,7 @@ class ProfileStoryFieldsSupportTest {
   @DisplayName("normalizeBlocks preserves normalized period")
   void normalizeBlocks_preservesPeriod() {
     List<ProfileMediaBlock> result = ProfileStoryFieldsSupport.normalizeBlocks(
-        List.of(new ProfileMediaBlock(UUID.randomUUID(), 0, "Title", null, null, " 2020-2023 ", List.of())),
+        List.of(new ProfileMediaBlock(UUID.randomUUID(), 0, "Title", null, null, " 2020-2023 ")),
         USER_ID
     );
     assertEquals("2020-2023", result.get(0).period());
@@ -184,7 +174,7 @@ class ProfileStoryFieldsSupportTest {
   @DisplayName("normalizeBlocks clears blank period")
   void normalizeBlocks_clearsBlankPeriod() {
     List<ProfileMediaBlock> result = ProfileStoryFieldsSupport.normalizeBlocks(
-        List.of(new ProfileMediaBlock(UUID.randomUUID(), 0, "Title", null, null, "   ", List.of())),
+        List.of(new ProfileMediaBlock(UUID.randomUUID(), 0, "Title", null, null, "   ")),
         USER_ID
     );
     assertNull(result.get(0).period());
@@ -204,7 +194,6 @@ class ProfileStoryFieldsSupportTest {
             null,
             null,
             "2021 — present",
-            List.of("Editing"),
             "ongoing",
             List.of(" Cut reels ", "Color grade"),
             List.of(
@@ -213,7 +202,6 @@ class ProfileStoryFieldsSupportTest {
             ),
             List.of(new com.plateforme.user.dto.ExperienceProofLink(
                 linkId, "Repo", "https://github.com/example/project", "github", 0)),
-            "  Client NDAs apply ",
             " Remote ",
             "freelance"
         )),
@@ -230,7 +218,6 @@ class ProfileStoryFieldsSupportTest {
     assertEquals(1, block.links().size());
     assertEquals(linkId, block.links().get(0).id());
     assertEquals("GITHUB", block.links().get(0).platform());
-    assertEquals("Client NDAs apply", block.remarks());
     assertEquals("Remote", block.location());
     assertEquals("FREELANCE", block.employmentType());
   }
@@ -251,8 +238,8 @@ class ProfileStoryFieldsSupportTest {
   void normalizeBlocks_rejectsInvalidStatus() {
     assertThrows(BusinessException.class, () -> ProfileStoryFieldsSupport.normalizeBlocks(
         List.of(new ProfileMediaBlock(
-            UUID.randomUUID(), 0, null, null, "Text", null, null, null, List.of(),
-            "ACTIVE", List.of(), List.of(), List.of(), null, null, null)),
+            UUID.randomUUID(), 0, null, null, "Text", null, null, null,
+            "ACTIVE", List.of(), List.of(), List.of(), null, null)),
         USER_ID
     ));
   }
