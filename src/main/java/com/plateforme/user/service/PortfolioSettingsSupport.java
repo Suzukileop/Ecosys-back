@@ -26,7 +26,13 @@ public final class PortfolioSettingsSupport {
         if (settings == null || settings.isEmpty()) {
             return Map.of();
         }
-        return Map.copyOf(settings);
+        Map<String, Object> copy = new HashMap<>();
+        for (Map.Entry<String, Object> entry : settings.entrySet()) {
+            if (entry.getKey() != null) {
+                copy.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return copy;
     }
 
     public static Map<String, Object> normalize(Map<String, Object> raw, ObjectMapper objectMapper) {
@@ -61,6 +67,30 @@ public final class PortfolioSettingsSupport {
             return;
         }
         settings.put("updatedAt", Instant.now().toString());
+    }
+
+    /**
+     * True when {@code incoming} is an older snapshot than {@code existing}.
+     * Protects against overlapping PUTs where a slower request would roll settings back.
+     */
+    static boolean isStaleWrite(Map<String, Object> existing, Map<String, Object> incoming) {
+        Instant existingAt = parseUpdatedAt(existing == null ? null : existing.get("updatedAt"));
+        Instant incomingAt = parseUpdatedAt(incoming == null ? null : incoming.get("updatedAt"));
+        if (existingAt == null || incomingAt == null) {
+            return false;
+        }
+        return incomingAt.isBefore(existingAt);
+    }
+
+    private static Instant parseUpdatedAt(Object value) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return null;
+        }
+        try {
+            return Instant.parse(text.trim());
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
     }
 
     private static boolean isValidIsoInstant(String value) {

@@ -234,7 +234,12 @@ public class CreatorProfileService {
     public Map<String, Object> updatePortfolioSettings(UUID userId, Map<String, Object> settings) {
         User user = requireCreatorUser(userId);
         CreatorProfile profile = getOrCreateProfile(user);
+        Map<String, Object> existing = PortfolioSettingsSupport.read(profile);
         Map<String, Object> normalized = PortfolioSettingsSupport.normalize(settings, objectMapper);
+        if (PortfolioSettingsSupport.isStaleWrite(existing, normalized)) {
+            log.info("Ignoring stale portfolio settings write for user={}", userId);
+            return existing;
+        }
         profile.setPortfolioSettings(new HashMap<>(normalized));
         creatorProfileRepository.save(profile);
         return PortfolioSettingsSupport.read(profile);
