@@ -35,8 +35,11 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             if (jwt != null && jwtUtils.validateToken(jwt)) {
                 String jti = jwtUtils.extractJti(jwt);
 
-                if (isTokenBlacklisted(jti)) {
-                    log.warn("Token révoqué détecté, jti: {}", jti);
+                RevocationCheck revocation = checkRevocation(jti);
+                if (revocation != RevocationCheck.ALLOWED) {
+                    if (revocation == RevocationCheck.REVOKED) {
+                        log.warn("Token révoqué détecté, jti: {}", jti);
+                    }
                     filterChain.doFilter(request, response);
                     return;
                 }
@@ -66,7 +69,32 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private boolean isTokenBlacklisted(String jti) {
-        return Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti));
+    /**
+     * Resultat de la verification de revocation. `UNAVAILABLE` est volontairement distinct de
+     * `REVOKED` : les deux refusent la requete, mais un Redis injoignable n'est pas un token
+     * revoque, et confondre les deux dans les logs transforme une panne d'infrastructure en
+     * "probleme d'authentification" — c'est exactement ce qui a fait durer la panne du 25/09.
+     */
+    private enum RevocationCheck { ALLOWED, REVOKED, UNAVAILABLE }
+
+    /**
+     * Redis porte la liste de revocation. S'il est injoignable, on ne peut pas prouver que le
+     * token est toujours valide : on echoue *ferme* (requete poursuivie sans authentification)
+     * plutot que d'accorder l'acces sur la foi d'une verification qu'on n'a pas pu faire.
+     * Combine au `timeout` de 500ms cote configuration, l'echec est desormais immediat au lieu
+     * d'attendre 60s. Passer en "fail open" (accepter le token quand Redis est absent) est
+     * possible mais c'est un arbitrage de securite : pendant la panne, les tokens revoques
+     * redeviendraient valides.
+     */
+    private RevocationCheck checkRevocation(String jti) {
+        try {
+            return Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti))
+                    ? RevocationCheck.REVOKED
+                    : RevocationCheck.ALLOWED;
+        } catch (RuntimeException e) {
+            log.error("Liste de révocation Redis indisponible — requête traitée comme "
+                    + "non authentifiée (ce n'est pas un problème d'identifiants): {}", e.getMessage());
+            return RevocationCheck.UNAVAILABLE;
+        }
     }
 }

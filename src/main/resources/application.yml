@@ -24,6 +24,13 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # Sans ces deux valeurs, Lettuce applique son defaut de 60s par commande : un Redis
+      # injoignable ne fait pas echouer les requetes, il les fait *attendre*, les threads Tomcat
+      # s'empilent et l'application parait gelee alors qu'elle est seulement en attente.
+      # 500ms : largement au-dessus d'un aller-retour local (<5ms), assez court pour que la
+      # degradation reste invisible a l'utilisateur.
+      timeout: ${REDIS_TIMEOUT:500ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
       repositories:
         enabled: false
   servlet:

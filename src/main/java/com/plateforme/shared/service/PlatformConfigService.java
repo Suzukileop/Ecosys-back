@@ -23,7 +23,10 @@ public class PlatformConfigService {
     private final RedisTemplate<String, String> redisTemplate;
 
     public int getTarifUnitaireCents() {
-        String cached = redisTemplate.opsForValue().get(CACHE_KEY);
+        // Redis n'est ici qu'un cache : Postgres detient la valeur de reference. Un cache ne doit
+        // jamais etre une dependance dure — avant ce garde-fou, un Redis injoignable faisait
+        // echouer tout le calcul tarifaire alors que la donnee etait disponible en base.
+        String cached = readCachedTarif();
         if (cached != null && !cached.isBlank()) {
             try {
                 return Integer.parseInt(cached.trim());
@@ -37,8 +40,25 @@ public class PlatformConfigService {
                         "Configuration tarifaire introuvable"));
 
         int cents = Integer.parseInt(row.getConfigValue().trim());
-        redisTemplate.opsForValue().set(CACHE_KEY, String.valueOf(cents), Duration.ofHours(1));
+        writeCachedTarif(cents);
         return cents;
+    }
+
+    private String readCachedTarif() {
+        try {
+            return redisTemplate.opsForValue().get(CACHE_KEY);
+        } catch (RuntimeException e) {
+            log.warn("Cache tarif indisponible (Redis), lecture DB: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private void writeCachedTarif(int cents) {
+        try {
+            redisTemplate.opsForValue().set(CACHE_KEY, String.valueOf(cents), Duration.ofHours(1));
+        } catch (RuntimeException e) {
+            log.warn("Ecriture du cache tarif impossible (Redis): {}", e.getMessage());
+        }
     }
 
     public int calculateMonthlyAmount(int nbPostsPerWeek) {
