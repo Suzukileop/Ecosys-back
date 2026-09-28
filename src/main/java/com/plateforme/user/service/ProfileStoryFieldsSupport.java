@@ -36,12 +36,13 @@ public final class ProfileStoryFieldsSupport {
 
     static final int MAX_TASKS_PER_BLOCK = 12;
     static final int MAX_TASK_LENGTH = 300;
-    static final int MAX_TOOLS_PER_BLOCK = 8;
+    static final int MAX_TOOLS_PER_BLOCK = 20;
     static final int MAX_TOOL_LENGTH = 80;
     static final int MAX_LINKS_PER_BLOCK = 5;
     static final int MAX_LINK_LABEL = 100;
     static final int MAX_LINK_URL = 500;
     static final int MAX_LOCATION_LENGTH = 120;
+    static final int MAX_CUSTOM_EMPLOYMENT_LENGTH = 40;
 
     private static final Set<String> ALLOWED_STATUS = Set.of("ONGOING", "FINISHED");
     private static final Set<String> ALLOWED_EMPLOYMENT = Set.of(
@@ -144,11 +145,14 @@ public final class ProfileStoryFieldsSupport {
             return null;
         }
         String upper = value.toUpperCase(Locale.ROOT);
-        if (!ALLOWED_EMPLOYMENT.contains(upper)) {
-            throw new BusinessException("BLOCK_EMPLOYMENT_TYPE_INVALID",
-                    "Employment type must be FULL_TIME, PART_TIME, CONTRACT, FREELANCE, or INTERNSHIP.");
+        if (ALLOWED_EMPLOYMENT.contains(upper)) {
+            return upper;
         }
-        return upper;
+        if (value.length() > MAX_CUSTOM_EMPLOYMENT_LENGTH) {
+            throw new BusinessException("BLOCK_EMPLOYMENT_TYPE_INVALID",
+                    "Custom employment type must be at most " + MAX_CUSTOM_EMPLOYMENT_LENGTH + " characters.");
+        }
+        return value;
     }
 
     public static List<String> normalizeSubtitles(List<String> raw) {
@@ -363,46 +367,6 @@ public final class ProfileStoryFieldsSupport {
             }
         }
         return List.copyOf(normalized);
-    }
-
-    static List<ProfileStrengthToolDto> normalizeStrengths(
-            List<ProfileStrengthToolDto> raw,
-            UUID userId,
-            List<String> allowedSpecialties) {
-        List<ProfileStrengthToolDto> normalized = normalizeStrengths(raw, userId);
-        if (allowedSpecialties == null || allowedSpecialties.isEmpty()) {
-            return normalized.stream()
-                    .map(item -> new ProfileStrengthToolDto(
-                            item.name(),
-                            item.description(),
-                            null,
-                            item.level(),
-                            item.useCases(),
-                            item.experienceYears(),
-                            item.experienceLabel(),
-                            item.currentlyUsed(),
-                            item.iconUrl()))
-                    .toList();
-        }
-        String fallback = allowedSpecialties.get(0);
-        List<ProfileStrengthToolDto> remapped = new ArrayList<>();
-        for (ProfileStrengthToolDto item : normalized) {
-            String category = SpecialtyTaxonomy.matchAllowed(item.category(), allowedSpecialties);
-            if (category == null) {
-                category = fallback;
-            }
-            remapped.add(new ProfileStrengthToolDto(
-                    item.name(),
-                    item.description(),
-                    category,
-                    item.level(),
-                    item.useCases(),
-                    item.experienceYears(),
-                    item.experienceLabel(),
-                    item.currentlyUsed(),
-                    item.iconUrl()));
-        }
-        return List.copyOf(remapped);
     }
 
     private static List<String> normalizeStrengthUseCases(List<String> raw) {

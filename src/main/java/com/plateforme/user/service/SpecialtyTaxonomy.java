@@ -10,11 +10,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Flat specialty tags: free-text labels (max 3, one primary) plus Popular-chip shortcuts.
+ * Flat specialty tags: free-text labels (max 20, one primary) plus Popular-chip shortcuts.
  */
 public final class SpecialtyTaxonomy {
 
-    public static final int MAX_SPECIALTIES = 3;
+    public static final int MAX_SPECIALTIES = 20;
     public static final int MAX_SPECIALTY_LENGTH = 80;
     public static final int MAX_TAGS = 8;
     public static final int MAX_TAG_LENGTH = 40;

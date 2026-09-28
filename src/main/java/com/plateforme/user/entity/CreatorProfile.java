@@ -52,7 +52,7 @@ public class CreatorProfile {
     @Column(length = 150)
     private String specialite;
 
-    /** Closed taxonomy labels (max 3). First item is the primary specialty. */
+    /** Closed taxonomy labels (max 20). First item is the primary specialty. */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "specialties", columnDefinition = "jsonb", nullable = false)
     private List<String> specialties = new ArrayList<>();

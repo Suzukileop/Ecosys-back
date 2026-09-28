@@ -16,7 +16,7 @@ public record UpdateCreatorProfileDto(
         @Size(max = 150)
         String specialite,
 
-        @Size(max = 3)
+        @Size(max = 20)
         List<String> specialties,
 
         @Size(max = 8)

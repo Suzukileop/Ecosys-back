@@ -15,6 +15,7 @@ public final class OwnedMediaUrlValidator {
         String userSegment = userId.toString();
         if (!mediaUrl.contains("/content/public/" + userSegment + "/")
                 && !mediaUrl.contains("content/public/" + userSegment + "/")
+                && !mediaUrl.contains("content/public/experience/" + userSegment + "/")
                 && !mediaUrl.contains("/marketplace/public/" + userSegment + "/")
                 && !mediaUrl.contains("marketplace/public/" + userSegment + "/")) {
             throw new BusinessException("BLOCK_MEDIA_URL_FORBIDDEN",

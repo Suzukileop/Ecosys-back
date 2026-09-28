@@ -67,13 +67,6 @@ public class CreatorProfileService {
             List<String> normalized = SpecialtyTaxonomy.normalizeSpecialties(source, dto.specialite());
             profile.setSpecialties(new ArrayList<>(normalized));
             profile.setSpecialite(SpecialtyTaxonomy.primaryOf(normalized));
-            if (dto.strengthsToolsMastered() == null) {
-                profile.setStrengthsToolsMastered(new ArrayList<>(
-                        ProfileStoryFieldsSupport.normalizeStrengths(
-                                profile.getStrengthsToolsMastered(),
-                                userId,
-                                normalized)));
-            }
         }
         if (dto.specialtyTags() != null) {
             profile.setSpecialtyTags(new ArrayList<>(SpecialtyTaxonomy.normalizeTags(dto.specialtyTags())));
@@ -118,10 +111,7 @@ public class CreatorProfileService {
         }
         if (dto.strengthsToolsMastered() != null) {
             profile.setStrengthsToolsMastered(new ArrayList<>(
-                    ProfileStoryFieldsSupport.normalizeStrengths(
-                            dto.strengthsToolsMastered(),
-                            userId,
-                            profile.getSpecialties())));
+                    ProfileStoryFieldsSupport.normalizeStrengths(dto.strengthsToolsMastered(), userId)));
         }
         if (dto.profileStack() != null) {
             profile.setProfileStack(new ArrayList<>(
