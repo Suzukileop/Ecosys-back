@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 public record AgentDeliverContentDto(
-        @NotNull(message = "La plateforme est obligatoire")
+        @NotNull(message = "A platform is required.")
         Platform platform,
 
         @Size(max = 2200)

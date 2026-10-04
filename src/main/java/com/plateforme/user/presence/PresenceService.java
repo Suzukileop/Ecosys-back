@@ -1,5 +1,6 @@
 package com.plateforme.user.presence;
 
+import com.plateforme.user.service.UserSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -48,6 +49,7 @@ public class PresenceService {
 
     private final RedisTemplate<String, String> redisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+    private final UserSettingsService userSettingsService;
 
     /** Local source of truth (avoids depending solely on SessionConnectedEvent + Redis). */
     private final ConcurrentHashMap<String, UUID> sessionToUser = new ConcurrentHashMap<>();
@@ -261,7 +263,19 @@ public class PresenceService {
     }
 
     public PresenceStatus getStatus(UUID userId) {
+        if (hidesStatus(userId)) {
+            return new PresenceStatus(userId, false, null);
+        }
         return new PresenceStatus(userId, isOnline(userId), lastSeenAt(userId));
+    }
+
+    private boolean hidesStatus(UUID userId) {
+        try {
+            return userSettingsService.hidesOnlineStatus(userId);
+        } catch (Exception ex) {
+            log.debug("Presence privacy lookup failed user={}: {}", userId, ex.getMessage());
+            return false;
+        }
     }
 
     private boolean hasActiveWsSession(UUID userId) {
@@ -427,7 +441,9 @@ public class PresenceService {
     }
 
     private void broadcast(UUID userId, boolean online, Instant lastSeenAt) {
-        PresenceStatusDto payload = new PresenceStatusDto(userId, online, lastSeenAt);
+        PresenceStatusDto payload = hidesStatus(userId)
+                ? new PresenceStatusDto(userId, false, null)
+                : new PresenceStatusDto(userId, online, lastSeenAt);
         messagingTemplate.convertAndSend("/topic/presence/" + userId, payload);
     }
 

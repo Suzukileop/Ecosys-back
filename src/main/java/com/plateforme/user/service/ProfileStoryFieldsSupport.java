@@ -107,7 +107,8 @@ public final class ProfileStoryFieldsSupport {
             String employmentType = normalizeEmploymentType(block.employmentType());
             normalized.add(new ProfileMediaBlock(
                     id, sortOrder, title, organization, text, mediaUrl, mediaType, period,
-                    status, tasks, tools, links, location, employmentType));
+                    status, tasks, tools, links, location, employmentType,
+                    Boolean.TRUE.equals(block.hideFromCv()) ? Boolean.TRUE : null));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);

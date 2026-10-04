@@ -24,6 +24,21 @@ class CreatorSearchExpandTest {
     }
 
     @Test
+    void expandedTerms_aiMapsToAiDomainNotDataScience() {
+        List<String> terms = CreatorSearchExpand.expandedTerms("AI");
+        String joined = String.join("|", terms).toLowerCase();
+        assertThat(joined).contains("machine learning");
+        assertThat(joined).containsAnyOf("llm", "chatgpt", "prompt");
+    }
+
+    @Test
+    void expandedTerms_dataAnalystIncludesBiTools() {
+        List<String> terms = CreatorSearchExpand.expandedTerms("Data analyst");
+        String joined = String.join("|", terms).toLowerCase();
+        assertThat(joined).containsAnyOf("power bi", "tableau", "sql", "dashboard");
+    }
+
+    @Test
     void specialtySignals_developerIsNonEmptyWithRelatedTerms() {
         List<String> signals = CreatorSearchExpand.specialtySignals("Developer");
         assertThat(signals).isNotEmpty();

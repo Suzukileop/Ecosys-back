@@ -30,7 +30,7 @@ public class UniqueCodeGenerator {
             log.warn("Collision détectée pour le code {} (tentative {})", code, attempt);
         }
         throw new BusinessException("UNIQUE_CODE_EXHAUSTED",
-                "Impossible de générer un code unique après " + MAX_RETRIES + " tentatives");
+                "Unable to generate a unique code. Please try again.");
     }
 
     private String generateSuffix() {

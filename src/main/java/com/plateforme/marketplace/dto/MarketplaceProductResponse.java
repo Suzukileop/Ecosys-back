@@ -49,5 +49,10 @@ public record MarketplaceProductResponse(
         boolean isPublished,
         LocalDateTime createdAt,
         LocalDateTime updatedAt,
-        List<String> galleryImageUrls
+        List<String> galleryImageUrls,
+        Integer stockQuantity,
+        boolean showOnProfile,
+        /** Rank among the shop's published products by units sold (1–3), null outside the top 3. */
+        Integer bestsellerRank,
+        List<CatalogueBestseller> catalogueBestsellers
 ) {}

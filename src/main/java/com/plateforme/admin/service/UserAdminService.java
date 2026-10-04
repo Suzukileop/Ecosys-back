@@ -53,7 +53,7 @@ public class UserAdminService {
         for (String roleName : request.roles()) {
             String fullRoleName = roleName.startsWith("ROLE_") ? roleName : "ROLE_" + roleName;
             Role role = roleRepository.findByName(fullRoleName)
-                    .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Rôle introuvable: " + fullRoleName));
+                    .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role not found."));
             newRoles.add(role);
         }
 
@@ -62,8 +62,8 @@ public class UserAdminService {
 
         saveAuditLog(actor, "UPDATE_ROLES", user,
                 "Rôles mis à jour: " + request.roles());
-        log.info("Rôles de l'utilisateur {} mis à jour par {}", user.getEmail(),
-                actor != null ? actor.getEmail() : "system");
+        log.info("Rôles de l'utilisateur {} mis à jour par {}", user.getId(),
+                actor != null ? actor.getId() : "system");
 
         return toUserDto(user);
     }
@@ -77,14 +77,14 @@ public class UserAdminService {
         userRepository.save(user);
 
         saveAuditLog(actor, "DISABLE_USER", user, "Utilisateur désactivé (soft delete)");
-        log.info("Utilisateur {} désactivé par {}", user.getEmail(),
-                actor != null ? actor.getEmail() : "system");
+        log.info("Utilisateur {} désactivé par {}", user.getId(),
+                actor != null ? actor.getId() : "system");
     }
 
     @Transactional
     public UserDto enableUser(UUID id) {
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         User actor = getCurrentActor();
 
@@ -92,15 +92,15 @@ public class UserAdminService {
         user = userRepository.save(user);
 
         saveAuditLog(actor, "ENABLE_USER", user, "Utilisateur réactivé");
-        log.info("Utilisateur {} réactivé par {}", user.getEmail(),
-                actor != null ? actor.getEmail() : "system");
+        log.info("Utilisateur {} réactivé par {}", user.getId(),
+                actor != null ? actor.getId() : "system");
 
         return toUserDto(user);
     }
 
     private User findActiveUserById(UUID id) {
         return userRepository.findByIdAndDeletedAtIsNull(id)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
     }
 
     private User getCurrentActor() {

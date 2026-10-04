@@ -6,22 +6,22 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public record SignupRequest(
-        @Email(message = "Email invalide")
-        @NotBlank(message = "L'email est obligatoire")
+        @Email(message = "Enter a valid email address.")
+        @NotBlank(message = "Email is required.")
         String email,
 
-        @NotBlank(message = "Le mot de passe est obligatoire")
-        @Size(min = 8, message = "Le mot de passe doit contenir au moins 8 caractères")
+        @NotBlank(message = "Password is required.")
+        @Size(min = 8, message = "Password must be at least 8 characters.")
         String password,
 
-        @NotBlank(message = "Le nom complet est obligatoire")
+        @NotBlank(message = "Full name is required.")
         String fullName,
 
-        @NotBlank(message = "Le nom d'utilisateur est obligatoire")
-        @Size(min = 3, max = 30, message = "Le nom d'utilisateur doit contenir entre 3 et 30 caractères")
+        @NotBlank(message = "Username is required.")
+        @Size(min = 3, max = 30, message = "Username must be 3 to 30 characters.")
         @Pattern(
                 regexp = "^[A-Za-z0-9_]+$",
-                message = "Le nom d'utilisateur ne peut contenir que des lettres, chiffres et underscores"
+                message = "Username may only contain letters, numbers and underscores."
         )
         String username,
 

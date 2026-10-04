@@ -57,7 +57,7 @@ class ProfileExtensionsSupportTest {
         assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeLinks(tooMany));
 
         assertThrows(BusinessException.class, () -> ProfileExtensionsSupport.normalizeLinks(List.of(
-                new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site", "javascript:alert(1)", 0, null, null)
+                new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site", "javascript:alert(1)", 0, null, null, null)
         )));
     }
 
@@ -481,6 +481,6 @@ class ProfileExtensionsSupportTest {
 
     private static ProfileLinkDto link(int order) {
         return new ProfileLinkDto(
-                UUID.randomUUID(), "CUSTOM", "Link " + order, "https://example.com/" + order, order, null, null);
+                UUID.randomUUID(), "CUSTOM", "Link " + order, "https://example.com/" + order, order, null, null, null);
     }
 }

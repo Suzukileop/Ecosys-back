@@ -46,7 +46,7 @@ public class CreditController {
 
     private UUID resolveCurrentUserId(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new BusinessException("UNAUTHORIZED", "Non authentifié");
+            throw new BusinessException("UNAUTHORIZED", "You need to sign in to continue.");
         }
         Object principal = authentication.getPrincipal();
         if (principal instanceof User user) {
@@ -55,6 +55,6 @@ public class CreditController {
         return userRepository.findByEmailAndDeletedAtIsNull(authentication.getName())
                 .map(User::getId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + authentication.getName()));
+                        "User not found."));
     }
 }

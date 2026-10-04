@@ -10,6 +10,7 @@ import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.UserSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -47,6 +48,7 @@ public class NotificationService {
     private final CreatorProfileRepository creatorProfileRepository;
     private final PublicMediaUrlResolver publicMediaUrlResolver;
     private final MailDeliveryService mailDeliveryService;
+    private final UserSettingsService userSettingsService;
 
     @Transactional
     public void createAndSend(UUID userId, String type, String title, String message,
@@ -67,10 +69,14 @@ public class NotificationService {
             );
             return;
         }
+        if (userSettingsService.isNotificationMuted(userId, type)) {
+            log.debug("Notification skipped (muted in settings) user={} type={}", userId, type);
+            return;
+        }
 
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + userId));
+                        "User not found."));
 
         String normalized = channelStr != null ? channelStr.trim().toUpperCase() : "PLATFORM";
 
@@ -112,6 +118,10 @@ public class NotificationService {
      * Ne doit pas faire échouer la transaction métier si l’envoi échoue (implémentations synchrones).
      */
     private void sendEmailNonBlocking(User user, String title, String message) {
+        if (userSettingsService.isEmailMuted(user.getId())) {
+            log.debug("Email skipped (email notifications off) user={}", user.getId());
+            return;
+        }
         try {
             mailDeliveryService.sendPlainText(
                     user.getEmail(),
@@ -175,12 +185,12 @@ public class NotificationService {
     public void markAsRead(UUID notifId, UUID userId) {
         Notification notification = notificationRepository.findById(notifId)
                 .orElseThrow(() -> new BusinessException("NOTIFICATION_NOT_FOUND",
-                        "Notification introuvable : " + notifId));
+                        "Notification not found."));
 
         UUID ownerId = notification.getUser() != null ? notification.getUser().getId() : null;
         if (!Objects.equals(ownerId, userId)) {
             throw new BusinessException("NOTIFICATION_ACCESS_DENIED",
-                    "Cette notification n'appartient pas à l'utilisateur courant");
+                    "You do not have access to this notification.");
         }
 
         notification.setIsRead(true);

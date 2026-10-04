@@ -27,7 +27,7 @@ public class ChatService {
     public ChatMessage saveMessage(String roomId, UUID senderId, String content) {
         User sender = userRepository.findByIdAndDeletedAtIsNull(senderId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Expéditeur introuvable : " + senderId));
+                        "Sender not found."));
 
         ChatMessage message = new ChatMessage();
         message.setRoomId(roomId);

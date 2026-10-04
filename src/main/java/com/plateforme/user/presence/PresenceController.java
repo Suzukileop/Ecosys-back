@@ -83,7 +83,7 @@ public class PresenceController {
             try {
                 unique.add(UUID.fromString(trimmed));
             } catch (IllegalArgumentException ex) {
-                throw new BusinessException("PRESENCE_INVALID_ID", "Invalid user id: " + trimmed);
+                throw new BusinessException("PRESENCE_INVALID_ID", "Invalid user id.");
             }
             if (unique.size() > MAX_IDS) {
                 throw new BusinessException(

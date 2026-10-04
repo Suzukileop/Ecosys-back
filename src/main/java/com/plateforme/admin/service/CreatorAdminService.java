@@ -27,7 +27,7 @@ public class CreatorAdminService {
     public CreatorProfileDto setVerified(UUID creatorUserId, boolean verified) {
         User user = userRepository.findByIdAndDeletedAtIsNull(creatorUserId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "User not found: " + creatorUserId));
+                        "User not found."));
 
         boolean hasCreatorRole = user.getRoles().stream()
                 .anyMatch(r -> "ROLE_CREATOR".equals(r.getName()));
@@ -37,7 +37,7 @@ public class CreatorAdminService {
 
         CreatorProfile profile = creatorProfileRepository.findByUserId(creatorUserId)
                 .orElseThrow(() -> new BusinessException("CREATOR_PROFILE_NOT_FOUND",
-                        "Creator profile not found for user: " + creatorUserId));
+                        "Creator profile not found."));
 
         profile.setIsVerified(verified);
         creatorProfileRepository.save(profile);

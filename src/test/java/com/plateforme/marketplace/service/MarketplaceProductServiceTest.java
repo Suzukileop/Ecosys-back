@@ -5,6 +5,7 @@ import com.plateforme.marketplace.entity.DeliveryMode;
 import com.plateforme.marketplace.entity.DemoType;
 import com.plateforme.marketplace.entity.MarketplaceProduct;
 import com.plateforme.marketplace.entity.ProductType;
+import com.plateforme.marketplace.repository.MarketplaceProductGroupItemRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
@@ -45,6 +46,12 @@ class MarketplaceProductServiceTest {
 
     @Mock
     private FollowerPublishNotifyService followerPublishNotifyService;
+
+    @Mock
+    private ProductBestsellerService bestsellerService;
+
+    @Mock
+    private MarketplaceProductGroupItemRepository productGroupItemRepository;
 
     @InjectMocks
     private MarketplaceProductService productService;
@@ -137,6 +144,7 @@ class MarketplaceProductServiceTest {
 
         when(productRepository.findById(productId)).thenReturn(Optional.of(product));
         when(productRepository.save(product)).thenAnswer(inv -> inv.getArgument(0));
+        when(bestsellerService.rank(any())).thenReturn(ProductBestsellerService.Rankings.EMPTY);
 
         var result = productService.setPublished(creatorId, productId, true);
 
@@ -200,8 +208,8 @@ class MarketplaceProductServiceTest {
                 null,
                 null,
                 false,
-                false,
-                List.of()
+                List.of(),
+                null
         );
 
         assertThatThrownBy(() -> productService.createProduct(creatorId, req))
@@ -240,8 +248,8 @@ class MarketplaceProductServiceTest {
                 null,
                 null,
                 false,
-                false,
-                List.of()
+                List.of(),
+                null
         );
     }
 }

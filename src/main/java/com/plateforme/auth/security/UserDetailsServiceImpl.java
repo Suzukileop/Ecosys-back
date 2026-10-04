@@ -1,5 +1,6 @@
 package com.plateforme.auth.security;
 
+import com.plateforme.shared.util.LogMasking;
 import com.plateforme.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,11 +20,11 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     @Override
     @Transactional(readOnly = true)
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        log.debug("Chargement de l'utilisateur par email: {}", email);
+        log.debug("Chargement de l'utilisateur par email: {}", LogMasking.email(email));
         return userRepository.findByEmailAndDeletedAtIsNull(email)
                 .orElseThrow(() -> {
-                    log.warn("Utilisateur introuvable pour l'email: {}", email);
-                    return new UsernameNotFoundException("Utilisateur introuvable: " + email);
+                    log.warn("Utilisateur introuvable pour l'email: {}", LogMasking.email(email));
+                    return new UsernameNotFoundException("Utilisateur introuvable");
                 });
     }
 }

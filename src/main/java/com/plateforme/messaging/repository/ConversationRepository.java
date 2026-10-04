@@ -21,15 +21,26 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
             """)
     List<Conversation> findAllForUserOrderByUpdatedAtDesc(@Param("userId") UUID userId);
 
+    /**
+     * Direct threads between two members, newest first — the same thread the inbox shows for that
+     * peer. Invited guests do not turn a direct thread into another conversation, so they are not
+     * counted.
+     */
     @Query("""
             SELECT c FROM Conversation c
-            WHERE c.id IN (
-                SELECT cp1.conversation.id FROM ConversationParticipant cp1 WHERE cp1.user.id = :userId1
+            WHERE c.type = com.plateforme.messaging.entity.ConversationType.DIRECT
+            AND c.temporarySession = false
+            AND c.id IN (
+                SELECT cp1.conversation.id FROM ConversationParticipant cp1
+                WHERE cp1.user.id = :userId1
+                AND cp1.role <> com.plateforme.messaging.entity.ParticipantRole.GUEST
+                AND cp1.leftAt IS NULL
             )
             AND c.id IN (
-                SELECT cp2.conversation.id FROM ConversationParticipant cp2 WHERE cp2.user.id = :userId2
+                SELECT cp2.conversation.id FROM ConversationParticipant cp2
+                WHERE cp2.user.id = :userId2
+                AND cp2.role <> com.plateforme.messaging.entity.ParticipantRole.GUEST
             )
-            AND (SELECT COUNT(cp3) FROM ConversationParticipant cp3 WHERE cp3.conversation.id = c.id) = 2
             ORDER BY c.updatedAt DESC
             """)
     List<Conversation> findDirectConversationsBetweenUsersOrderByUpdatedAtDesc(

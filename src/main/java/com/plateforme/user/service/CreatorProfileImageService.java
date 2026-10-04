@@ -62,7 +62,7 @@ public class CreatorProfileImageService {
     public CreatorProfileImageDto restore(UUID userId, UUID imageId) {
         User user = requireCreator(userId);
         CreatorProfileImage image = imageRepository.findByIdAndUserId(imageId, userId)
-                .orElseThrow(() -> new BusinessException("IMAGE_NOT_FOUND", "Image introuvable"));
+                .orElseThrow(() -> new BusinessException("IMAGE_NOT_FOUND", "Image not found."));
 
         user.setAvatarUrl(image.getUrl());
         userRepository.save(user);
@@ -86,7 +86,7 @@ public class CreatorProfileImageService {
 
     private User requireCreator(UUID userId) {
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
         boolean isCreator = user.getRoles() != null
                 && user.getRoles().stream().anyMatch(r -> "ROLE_CREATOR".equals(r.getName()));
         if (!isCreator) {

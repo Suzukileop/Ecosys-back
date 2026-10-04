@@ -37,14 +37,16 @@ public class MarketplacePurchaseService {
     @Transactional
     public PurchaseResponse simulatePurchase(UUID buyerId, UUID productId) {
         User buyer = userRepository.findByIdAndDeletedAtIsNull(buyerId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + buyerId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         MarketplaceProduct product = productService.requirePublishedProduct(productId);
 
-        if (purchaseRepository.existsByBuyer_IdAndProduct_IdAndPaymentStatus(
+        boolean physical = product.getType() == ProductType.PHYSICAL;
+        if (!physical && purchaseRepository.existsByBuyer_IdAndProduct_IdAndPaymentStatus(
                 buyerId, productId, MarketplacePurchaseStatus.COMPLETED)) {
             throw new BusinessException("ALREADY_PURCHASED", "You already own this product");
         }
+        productService.consumeStock(product, 1);
 
         MarketplacePurchase purchase = new MarketplacePurchase();
         purchase.setBuyer(buyer);
@@ -64,11 +66,11 @@ public class MarketplacePurchaseService {
     @Transactional
     public PurchaseResponse simulateBundlePurchase(UUID buyerId, UUID bundleId) {
         User buyer = userRepository.findByIdAndDeletedAtIsNull(buyerId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + buyerId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         MarketplaceBundle bundle = bundleRepository.findByIdAndIsPublishedTrue(bundleId)
                 .orElseThrow(() -> new BusinessException("BUNDLE_NOT_FOUND",
-                        "Published bundle not found: " + bundleId));
+                        "Bundle not found."));
 
         if (purchaseRepository.existsByBuyer_IdAndBundle_IdAndPaymentStatus(
                 buyerId, bundleId, MarketplacePurchaseStatus.COMPLETED)) {
@@ -95,6 +97,7 @@ public class MarketplacePurchaseService {
                     buyerId, productId, MarketplacePurchaseStatus.COMPLETED)) {
                 continue;
             }
+            productService.consumeStock(product, 1);
             MarketplacePurchase productPurchase = new MarketplacePurchase();
             productPurchase.setBuyer(buyer);
             productPurchase.setProduct(product);
@@ -163,7 +166,7 @@ public class MarketplacePurchaseService {
     public MarketplacePurchase requireOwnedPurchase(UUID buyerId, UUID purchaseId) {
         return purchaseRepository.findByIdAndBuyer_Id(purchaseId, buyerId)
                 .orElseThrow(() -> new BusinessException("PURCHASE_NOT_FOUND",
-                        "Purchase not found: " + purchaseId));
+                        "Purchase not found."));
     }
 
     private PurchaseResponse toPurchaseResponse(MarketplacePurchase purchase) {

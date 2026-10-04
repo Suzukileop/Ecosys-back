@@ -897,9 +897,11 @@ public final class ProfileExtensionsSupport {
             Integer basePriceCents = item.basePriceCents();
             if ("QUOTE".equals(pricingType)) {
                 basePriceCents = null;
+            } else if ("FREE".equals(pricingType)) {
+                basePriceCents = 0;
             } else if (basePriceCents == null) {
                 throw new BusinessException("SERVICE_PRICE_REQUIRED",
-                        "A price is required unless pricing is \"Sur devis\".");
+                        "A price is required unless the service is priced on quote.");
             } else if (basePriceCents < 0) {
                 throw new BusinessException("SERVICE_PRICE_INVALID", "Service base price cannot be negative.");
             }
@@ -1027,8 +1029,9 @@ public final class ProfileExtensionsSupport {
             case "FIXED", "FIXE", "FIXED_PRICE" -> "FIXED";
             case "FROM", "A_PARTIR_DE", "STARTING_AT", "STARTING" -> "FROM";
             case "QUOTE", "SUR_DEVIS", "ON_REQUEST", "DEVIS" -> "QUOTE";
+            case "FREE", "GRATUIT", "FREE_OF_CHARGE" -> "FREE";
             default -> throw new BusinessException("SERVICE_PRICING_INVALID",
-                    "Pricing type must be fixe, à partir de, or sur devis.");
+                    "Pricing type must be fixed, starting at, quote on request, or free.");
         };
     }
 
@@ -1042,7 +1045,7 @@ public final class ProfileExtensionsSupport {
             case "PAUSED", "EN_PAUSE", "PAUSE" -> "PAUSED";
             case "ARCHIVED", "ARCHIVE", "ARCHIVÉ" -> "ARCHIVED";
             default -> throw new BusinessException("SERVICE_STATUS_INVALID",
-                    "Service status must be actif, en pause, or archivé.");
+                    "Service status must be active, paused or archived.");
         };
     }
 
@@ -1161,7 +1164,8 @@ public final class ProfileExtensionsSupport {
             }
             UUID id = item.id() != null ? item.id() : UUID.randomUUID();
             int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
-            normalized.add(new ProfileLinkDto(id, type, label, url, sortOrder, platform, iconUrl));
+            Boolean hideFromCv = Boolean.TRUE.equals(item.hideFromCv()) ? Boolean.TRUE : null;
+            normalized.add(new ProfileLinkDto(id, type, label, url, sortOrder, platform, iconUrl, hideFromCv));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);

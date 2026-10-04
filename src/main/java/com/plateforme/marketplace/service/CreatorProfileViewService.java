@@ -1,5 +1,6 @@
 package com.plateforme.marketplace.service;
 
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.marketplace.dto.CreatorProfileViewResponse;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.service.NotificationService;
@@ -10,6 +11,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.CreatorProfileVisitRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.UserSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -39,6 +41,8 @@ public class CreatorProfileViewService {
     private final CreatorProfileVisitRepository visitRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final PublicMediaUrlResolver publicMediaUrlResolver;
+    private final UserSettingsService userSettingsService;
 
     @Transactional
     public CreatorProfileViewResponse recordView(UUID creatorUserId, UUID viewerUserId, String anonymousVisitorKey) {
@@ -50,15 +54,17 @@ public class CreatorProfileViewService {
         }
 
         String visitorKey = resolveVisitorKey(viewerUserId, anonymousVisitorKey);
+        // Private browsing: still counted once per person, but listed and notified as anonymous.
+        if (viewerUserId != null && userSettingsService.browsesPrivately(viewerUserId)) {
+            viewerUserId = null;
+        }
         LocalDateTime now = LocalDateTime.now();
         var existing = visitRepository.findByCreatorUserIdAndVisitorKey(creatorUserId, visitorKey);
 
         if (existing.isPresent()) {
             CreatorProfileVisit visit = existing.get();
             visit.setViewedAt(now);
-            if (viewerUserId != null) {
-                visit.setViewerUserId(viewerUserId);
-            }
+            visit.setViewerUserId(viewerUserId);
             int previous = visit.getVisitCount() != null && visit.getVisitCount() > 0 ? visit.getVisitCount() : 1;
             visit.setVisitCount(previous + 1);
             visitRepository.save(visit);
@@ -120,7 +126,7 @@ public class CreatorProfileViewService {
         return visitRepository.countByCreatorUserId(creatorUserId);
     }
 
-    private static CreatorProfileVisitItemDto toVisitItemDto(
+    private CreatorProfileVisitItemDto toVisitItemDto(
             CreatorProfileVisit visit,
             Map<UUID, User> viewersById,
             Map<UUID, CreatorProfile> viewerProfilesByUserId
@@ -139,7 +145,7 @@ public class CreatorProfileViewService {
                 viewerFullName = "User";
             }
             if (viewer != null) {
-                viewerAvatarUrl = viewer.getAvatarUrl();
+                viewerAvatarUrl = publicMediaUrlResolver.resolveAvatarUrl(viewer.getAvatarUrl());
             }
             if (viewerProfile != null && viewerProfile.getAppRole() != null && !viewerProfile.getAppRole().isBlank()) {
                 viewerAppRole = viewerProfile.getAppRole().trim();

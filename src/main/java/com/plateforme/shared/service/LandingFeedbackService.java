@@ -54,7 +54,7 @@ public class LandingFeedbackService {
 
     private static String buildBody(String senderName, String senderEmail, String message) {
         return """
-                You received new feedback from the NoProbleme landing page.
+                You received new feedback from the Skraft landing page.
 
                 From: %s
                 Email: %s

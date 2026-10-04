@@ -3,6 +3,7 @@ package com.plateforme.marketplace.dto;
 import com.plateforme.marketplace.entity.DeliveryMode;
 import com.plateforme.marketplace.entity.DemoType;
 import com.plateforme.marketplace.entity.ProductType;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -77,11 +78,13 @@ public record MarketplaceProductRequest(
         @Size(max = 10)
         String videoResolution,
 
-        Boolean isBestseller,
-
         Boolean isPublished,
 
-        List<String> galleryImageUrls
+        List<String> galleryImageUrls,
+
+        @Min(0)
+        @Max(1_000_000)
+        Integer stockQuantity
 ) {
     public MarketplaceProductRequest {
         if (currency == null || currency.isBlank()) {
@@ -95,9 +98,6 @@ public record MarketplaceProductRequest(
         }
         if (isPublished == null) {
             isPublished = Boolean.TRUE;
-        }
-        if (isBestseller == null) {
-            isBestseller = Boolean.FALSE;
         }
         if (galleryImageUrls == null) {
             galleryImageUrls = List.of();

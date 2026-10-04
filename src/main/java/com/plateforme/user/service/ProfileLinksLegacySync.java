@@ -30,13 +30,13 @@ final class ProfileLinksLegacySync {
         int order = 0;
         String website = blankToNull(websiteUrl);
         if (website != null) {
-            merged.add(new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site web", website, order++, null, null));
+            merged.add(new ProfileLinkDto(UUID.randomUUID(), "WEBSITE", "Site web", website, order++, null, null, null));
         }
         String cta = blankToNull(ctaUrl);
         if (cta != null) {
             String label = blankToNull(ctaLabel);
             merged.add(new ProfileLinkDto(
-                    UUID.randomUUID(), "CTA", label != null ? label : "Lien principal", cta, order++, null, null));
+                    UUID.randomUUID(), "CTA", label != null ? label : "Lien principal", cta, order++, null, null, null));
         }
         for (SocialLink social : SocialLinksJsonParser.parse(objectMapper, socialLinksJson)) {
             if (social.url() == null || social.url().isBlank()) {
@@ -49,6 +49,7 @@ final class ProfileLinksLegacySync {
                     social.url().trim(),
                     order++,
                     blankToNull(social.platform()),
+                    null,
                     null));
         }
         return merged;

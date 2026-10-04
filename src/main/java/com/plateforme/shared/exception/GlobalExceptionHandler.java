@@ -41,7 +41,7 @@ public class GlobalExceptionHandler {
             UsernameNotFoundException ex, HttpServletRequest request) {
         log.warn("Utilisateur introuvable: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(buildError(HttpStatus.NOT_FOUND, "Not Found", ex.getMessage(), request));
+                .body(buildError(HttpStatus.NOT_FOUND, "Not Found", "Account not found.", request));
     }
 
     @ExceptionHandler(BadCredentialsException.class)
@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
             BadCredentialsException ex, HttpServletRequest request) {
         log.warn("Mauvaises credentials: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(buildError(HttpStatus.UNAUTHORIZED, "Unauthorized", "Email ou mot de passe incorrect", request));
+                .body(buildError(HttpStatus.UNAUTHORIZED, "Unauthorized", "Incorrect email or password.", request));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
@@ -57,7 +57,7 @@ public class GlobalExceptionHandler {
             AccessDeniedException ex, HttpServletRequest request) {
         log.warn("Accès refusé: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(buildError(HttpStatus.FORBIDDEN, "Forbidden", "Accès refusé", request));
+                .body(buildError(HttpStatus.FORBIDDEN, "Forbidden", "You don't have permission to do this.", request));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -74,7 +74,7 @@ public class GlobalExceptionHandler {
         response.put("timestamp", LocalDateTime.now());
         response.put("status", HttpStatus.BAD_REQUEST.value());
         response.put("error", "Validation Failed");
-        response.put("message", "Les données de la requête sont invalides");
+        response.put("message", "Some fields are invalid. Please check your input.");
         response.put("path", request.getRequestURI());
         response.put("fieldErrors", fieldErrors);
 
@@ -87,7 +87,7 @@ public class GlobalExceptionHandler {
             ExpiredJwtException ex, HttpServletRequest request) {
         log.warn("Token JWT expiré: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(buildError(HttpStatus.UNAUTHORIZED, "Unauthorized", "Token expiré", request));
+                .body(buildError(HttpStatus.UNAUTHORIZED, "Unauthorized", "Your session has expired. Please sign in again.", request));
     }
 
     @ExceptionHandler(InsufficientCreditsException.class)
@@ -95,7 +95,8 @@ public class GlobalExceptionHandler {
             InsufficientCreditsException ex, HttpServletRequest request) {
         log.warn("Crédits insuffisants: requis={} disponible={}", ex.getRequired(), ex.getAvailable());
         return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
-                .body(buildError(HttpStatus.PAYMENT_REQUIRED, "INSUFFICIENT_CREDITS", ex.getMessage(), request));
+                .body(buildError(HttpStatus.PAYMENT_REQUIRED, "INSUFFICIENT_CREDITS",
+                        "You don't have enough credits for this action.", request));
     }
 
     @ExceptionHandler(BusinessException.class)
@@ -126,7 +127,8 @@ public class GlobalExceptionHandler {
             ServiceUnavailableException ex, HttpServletRequest request) {
         log.warn("Service indisponible: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable", ex.getMessage(), request));
+                .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable",
+                        "This service is temporarily unavailable. Please try again later.", request));
     }
 
     /**
@@ -152,7 +154,7 @@ public class GlobalExceptionHandler {
         log.warn("Corps de requête illisible {}: {}", request.getRequestURI(), rootMessage(ex));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(buildError(HttpStatus.BAD_REQUEST, "Bad Request",
-                        "Le corps de la requête est invalide ou incomplet", request));
+                        "The request could not be processed. Please try again.", request));
     }
 
     @ExceptionHandler(Exception.class)
@@ -165,7 +167,7 @@ public class GlobalExceptionHandler {
         log.error("Erreur interne inattendue: {}", ex.getMessage(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(buildError(HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error",
-                        "Une erreur interne s'est produite", request));
+                        "Something went wrong on our side. Please try again.", request));
     }
 
     private static boolean isClientAbort(Throwable ex) {

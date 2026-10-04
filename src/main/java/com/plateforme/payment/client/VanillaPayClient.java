@@ -82,13 +82,13 @@ public class VanillaPayClient {
             JsonNode data = requireData(root, "initiate");
             String url = data.path("url").asText(null);
             if (url == null || url.isBlank()) {
-                throw new BusinessException("VPI_INIT_FAILED", "URL de paiement VPI absente");
+                throw new BusinessException("VPI_INIT_FAILED", "Unable to start the payment. Please try again.");
             }
             String id = extractPaymentId(url);
             return new VpiPaymentInitResult(id, url);
         } catch (WebClientResponseException e) {
             log.error("VPI initiate HTTP {} : {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new BusinessException("VPI_INIT_FAILED", "Impossible d'initialiser le paiement VPI");
+            throw new BusinessException("VPI_INIT_FAILED", "Unable to start the payment. Please try again.");
         }
     }
 
@@ -112,7 +112,7 @@ public class VanillaPayClient {
             return mapPaymentDetails(data, paymentId);
         } catch (WebClientResponseException e) {
             log.error("VPI status HTTP {} : {}", e.getStatusCode(), e.getResponseBodyAsString());
-            throw new BusinessException("VPI_STATUS_FAILED", "Impossible de vérifier le paiement VPI");
+            throw new BusinessException("VPI_STATUS_FAILED", "Unable to verify the payment. Please try again.");
         }
     }
 
@@ -123,7 +123,12 @@ public class VanillaPayClient {
         try {
             String bodyJson = objectMapper.writeValueAsString(body);
             String hashed = hmacSha256Hex(keySecret, bodyJson);
-            return hashed.equalsIgnoreCase(vpiSignature.trim());
+            /* Constant-time: `equals` returns on the first differing byte, which leaks the
+               expected signature to a caller that can time its own webhook attempts. */
+            return java.security.MessageDigest.isEqual(
+                    hashed.toLowerCase(java.util.Locale.ROOT).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    vpiSignature.trim().toLowerCase(java.util.Locale.ROOT)
+                            .getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (JsonProcessingException e) {
             log.warn("VPI webhook : sérialisation payload impossible");
             return false;
@@ -143,7 +148,7 @@ public class VanillaPayClient {
         try {
             return mapPaymentDetails(objectMapper.valueToTree(data), body.getOrDefault("reference", ""));
         } catch (Exception e) {
-            throw new BusinessException("VPI_WEBHOOK_INVALID", "Payload webhook VPI invalide");
+            throw new BusinessException("VPI_WEBHOOK_INVALID", "Invalid payment notification.");
         }
     }
 
@@ -181,14 +186,14 @@ public class VanillaPayClient {
                 JsonNode data = requireData(root, "token");
                 String token = data.path("Token").asText(null);
                 if (token == null || token.isBlank()) {
-                    throw new BusinessException("VPI_AUTH_FAILED", "Token VPI absent");
+                    throw new BusinessException("VPI_AUTH_FAILED", "The payment provider could not be reached. Please try again.");
                 }
                 cachedToken = token;
                 tokenExpiresAt = Instant.now().plusSeconds(50 * 60);
                 return token;
             } catch (WebClientResponseException e) {
                 log.error("VPI auth HTTP {} : {}", e.getStatusCode(), e.getResponseBodyAsString());
-                throw new BusinessException("VPI_AUTH_FAILED", "Authentification VPI échouée");
+                throw new BusinessException("VPI_AUTH_FAILED", "The payment provider could not be reached. Please try again.");
             }
         }
     }
@@ -201,13 +206,13 @@ public class VanillaPayClient {
 
     private void ensureConfigured() {
         if (!isConfigured()) {
-            throw new BusinessException("VPI_NOT_CONFIGURED", "Vanilla Pay International non configuré");
+            throw new BusinessException("VPI_NOT_CONFIGURED", "Payments are not available right now.");
         }
     }
 
     private static JsonNode requireData(JsonNode root, String step) {
         if (root == null) {
-            throw new BusinessException("VPI_ERROR", "Réponse VPI vide (" + step + ")");
+            throw new BusinessException("VPI_ERROR", "The payment provider returned an empty response. Please try again.");
         }
         int code = root.path("CodeRetour").asInt(-1);
         if (code != 0 && code != 200) {
@@ -216,7 +221,7 @@ public class VanillaPayClient {
         }
         JsonNode data = root.path("Data");
         if (data.isMissingNode() || data.isNull()) {
-            throw new BusinessException("VPI_ERROR", "Données VPI absentes (" + step + ")");
+            throw new BusinessException("VPI_ERROR", "The payment provider returned incomplete data. Please try again.");
         }
         return data;
     }
@@ -279,7 +284,7 @@ public class VanillaPayClient {
             byte[] hash = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);
         } catch (Exception e) {
-            throw new BusinessException("VPI_SIGNATURE_ERROR", "Calcul signature VPI impossible");
+            throw new BusinessException("VPI_SIGNATURE_ERROR", "Unable to process the payment. Please try again.");
         }
     }
 

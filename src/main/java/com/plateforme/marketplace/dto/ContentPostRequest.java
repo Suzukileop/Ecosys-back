@@ -1,6 +1,5 @@
 package com.plateforme.marketplace.dto;
 
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
@@ -8,13 +7,12 @@ import java.util.List;
 import java.util.UUID;
 
 public record ContentPostRequest(
-        @Size(max = 300)
+        @Size(max = 3000)
         String title,
 
         @Size(max = 100)
         String genre,
 
-        @NotBlank
         @Size(max = 500)
         String mediaUrl,
 

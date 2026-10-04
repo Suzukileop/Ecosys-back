@@ -91,6 +91,22 @@ public class MarketplaceProductController {
         return ResponseEntity.ok(productService.setPublished(getCurrentUserId(), id, false));
     }
 
+    @Operation(summary = "Record an offline sale (decrements stock for physical products)")
+    @PostMapping("/{id}/sales")
+    public ResponseEntity<MarketplaceProductResponse> recordSale(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "1") int quantity) {
+        return ResponseEntity.ok(productService.recordSale(getCurrentUserId(), id, quantity));
+    }
+
+    @Operation(summary = "Undo a recorded offline sale (restores stock for physical products)")
+    @DeleteMapping("/{id}/sales")
+    public ResponseEntity<MarketplaceProductResponse> undoSale(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "1") int quantity) {
+        return ResponseEntity.ok(productService.undoSale(getCurrentUserId(), id, quantity));
+    }
+
     @Operation(summary = "Pin marketplace product to the top of listings")
     @PatchMapping("/{id}/pin")
     public ResponseEntity<MarketplaceProductResponse> pinProduct(@PathVariable UUID id) {
@@ -103,16 +119,16 @@ public class MarketplaceProductController {
         return ResponseEntity.ok(productService.setPinned(getCurrentUserId(), id, false));
     }
 
-    @Operation(summary = "Mark marketplace product as bestseller")
-    @PatchMapping("/{id}/bestseller")
-    public ResponseEntity<MarketplaceProductResponse> markBestseller(@PathVariable UUID id) {
-        return ResponseEntity.ok(productService.setBestseller(getCurrentUserId(), id, true));
+    @Operation(summary = "Show marketplace product on the creator's public profile")
+    @PatchMapping("/{id}/show-on-profile")
+    public ResponseEntity<MarketplaceProductResponse> showOnProfile(@PathVariable UUID id) {
+        return ResponseEntity.ok(productService.setShowOnProfile(getCurrentUserId(), id, true));
     }
 
-    @Operation(summary = "Remove bestseller mark from marketplace product")
-    @PatchMapping("/{id}/unbestseller")
-    public ResponseEntity<MarketplaceProductResponse> unmarkBestseller(@PathVariable UUID id) {
-        return ResponseEntity.ok(productService.setBestseller(getCurrentUserId(), id, false));
+    @Operation(summary = "Hide marketplace product from the creator's public profile")
+    @PatchMapping("/{id}/hide-from-profile")
+    public ResponseEntity<MarketplaceProductResponse> hideFromProfile(@PathVariable UUID id) {
+        return ResponseEntity.ok(productService.setShowOnProfile(getCurrentUserId(), id, false));
     }
 
     private UUID getCurrentUserId() {

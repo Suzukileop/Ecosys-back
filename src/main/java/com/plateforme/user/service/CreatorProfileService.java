@@ -44,7 +44,7 @@ public class CreatorProfileService {
     private final CreatorProfileVisitRepository creatorProfileVisitRepository;
     private final UserRepository userRepository;
     private final CreatorPortfolioService creatorPortfolioService;
-    private final CreatorReviewService creatorReviewService;
+    private final CreatorStarService creatorStarService;
     private final FollowerPublishNotifyService followerPublishNotifyService;
     private final ObjectMapper objectMapper;
 
@@ -331,12 +331,12 @@ public class CreatorProfileService {
     private User requireCreatorUser(UUID userId) {
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + userId));
+                        "User not found."));
         boolean hasCreatorRole = user.getRoles().stream()
                 .anyMatch(r -> "ROLE_CREATOR".equals(r.getName()));
         if (!hasCreatorRole) {
             throw new BusinessException("ROLE_REQUIRED",
-                    "L'utilisateur doit avoir le rôle CREATOR pour gérer un profil créateur");
+                    "Only creators can manage a creator profile.");
         }
         return user;
     }
@@ -413,7 +413,7 @@ public class CreatorProfileService {
                 p.getYearsOfExperience(),
                 safeStrengths(p.getStrengthsToolsMastered()),
                 safeStrengths(p.getProfileStack()),
-                creatorReviewService.getReputation(user.getId(), 5),
+                creatorStarService.getStarCount(user.getId()),
                 creatorProfileVisitRepository.countByCreatorUserId(user.getId()),
                 p.getGender(),
                 p.getNationality(),

@@ -58,7 +58,7 @@ public class MarketplaceAccessService {
     public ProductPreviewResponse getProductPreview(UUID productId) {
         MarketplaceProduct product = productRepository.findByIdAndIsPublishedTrue(productId)
                 .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND",
-                        "Published product not found: " + productId));
+                        "Product not found."));
 
         String previewUrl = null;
         if (product.getDemoType() != DemoType.NONE && product.getDemoUrl() != null) {

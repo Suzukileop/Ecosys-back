@@ -247,7 +247,7 @@ public class MarketplaceSocialService {
         if (request.parentId() != null) {
             parent = commentRepository.findById(request.parentId())
                     .orElseThrow(() -> new BusinessException("COMMENT_NOT_FOUND",
-                            "Parent comment not found: " + request.parentId()));
+                            "The comment you are replying to no longer exists."));
             if (parent.getTargetType() != request.targetType()
                     || !parent.getTargetId().equals(request.targetId())) {
                 throw new BusinessException("COMMENT_TARGET_MISMATCH",
@@ -286,9 +286,9 @@ public class MarketplaceSocialService {
     private ContentComment requireActiveComment(UUID commentId) {
         ContentComment comment = commentRepository.findById(commentId)
                 .orElseThrow(() -> new BusinessException("COMMENT_NOT_FOUND",
-                        "Comment not found: " + commentId));
+                        "Comment not found."));
         if (comment.getDeletedAt() != null) {
-            throw new BusinessException("COMMENT_NOT_FOUND", "Comment not found: " + commentId);
+            throw new BusinessException("COMMENT_NOT_FOUND", "Comment not found.");
         }
         return comment;
     }
@@ -377,7 +377,7 @@ public class MarketplaceSocialService {
         };
         if (!exists) {
             throw new BusinessException("TARGET_NOT_FOUND",
-                    targetType.name() + " not found: " + targetId);
+                    "Content not found.");
         }
     }
 
@@ -431,7 +431,7 @@ public class MarketplaceSocialService {
 
     private User requireUser(UUID userId) {
         return userRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + userId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
     }
 
     private CommentResponse toCommentResponse(

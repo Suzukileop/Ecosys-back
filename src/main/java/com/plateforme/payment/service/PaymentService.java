@@ -91,13 +91,13 @@ public class PaymentService {
     @Transactional
     public void confirmEcosystemPayment(UUID requestId, UUID clientId) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
-                .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND", "Demande introuvable"));
+                .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND", "Request not found."));
 
         if (nr.getPaymentStatus() == PaymentStatus.PAID || nr.getStatus() == NicheStatus.ACTIVE) {
             return;
         }
         if (nr.getVpiPaymentId() == null || nr.getVpiPaymentId().isBlank()) {
-            throw new BusinessException("PAYMENT_NOT_STARTED", "Aucun paiement en cours");
+            throw new BusinessException("PAYMENT_NOT_STARTED", "No payment is in progress.");
         }
 
         VpiPaymentDetails details = vanillaPayClient.getPaymentStatus(nr.getVpiPaymentId(), paymentMethod);
@@ -111,7 +111,7 @@ public class PaymentService {
         Map<String, String> payload = new LinkedHashMap<>(body);
         if (!vanillaPayClient.validateWebhookSignature(vpiSignature, payload)) {
             log.warn("Signature webhook VPI invalide");
-            throw new BusinessException("VPI_SIGNATURE_INVALID", "Signature webhook invalide");
+            throw new BusinessException("VPI_SIGNATURE_INVALID", "Invalid payment notification signature.");
         }
 
         VpiPaymentDetails details = vanillaPayClient.mapWebhookPayload(payload);
@@ -123,7 +123,7 @@ public class PaymentService {
 
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
 
         applyPaymentDetails(nr, details);
     }
@@ -132,7 +132,7 @@ public class PaymentService {
     public void activateEcosystem(UUID requestId) {
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
 
         nr.setStatus(NicheStatus.ACTIVE);
         nr.setActivatedAt(LocalDateTime.now());
@@ -212,13 +212,13 @@ public class PaymentService {
 
     private NicheRequest loadValidatedRequest(UUID requestId, UUID clientId) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
-                .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND", "Demande introuvable"));
+                .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND", "Request not found."));
 
         if (nr.getStatus() != NicheStatus.VALIDATED) {
-            throw new BusinessException("NICHE_NOT_VALIDATED", "La demande doit être validée avant paiement");
+            throw new BusinessException("NICHE_NOT_VALIDATED", "The request must be validated before payment.");
         }
         if (nr.getMonthlyAmountCents() == null || nr.getMonthlyAmountCents() <= 0) {
-            throw new BusinessException("INVALID_AMOUNT", "Montant mensuel invalide");
+            throw new BusinessException("INVALID_AMOUNT", "Invalid monthly amount.");
         }
         return nr;
     }
@@ -237,7 +237,7 @@ public class PaymentService {
 
     private void ensureVpiConfigured() {
         if (!vanillaPayClient.isConfigured()) {
-            throw new BusinessException("VPI_NOT_CONFIGURED", "Vanilla Pay International non configuré");
+            throw new BusinessException("VPI_NOT_CONFIGURED", "Payments are not available right now.");
         }
     }
 

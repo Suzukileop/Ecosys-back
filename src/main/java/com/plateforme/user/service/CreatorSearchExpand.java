@@ -227,6 +227,14 @@ public final class CreatorSearchExpand {
                 "data", "data science", "machine learning", "ml", "ai", "ia",
                 "python", "pandas", "analytics", "statistique", "excel", "power bi", "sql"
         ));
+        map.put("AI", List.of(
+                "ai", "ia", "artificial intelligence", "intelligence artificielle", "machine learning",
+                "deep learning", "llm", "chatgpt", "openai", "prompt", "genai", "computer vision", "nlp"
+        ));
+        map.put("Data analyst", List.of(
+                "data analyst", "data analysis", "analyse de données", "analyse de donnees", "analytics",
+                "power bi", "tableau", "excel", "sql", "dashboard", "reporting", "data visualization"
+        ));
         map.put("DevOps", List.of(
                 "devops", "docker", "kubernetes", "k8s", "ci/cd", "aws", "azure",
                 "linux", "terraform", "ansible", "cloud", "infrastructure"

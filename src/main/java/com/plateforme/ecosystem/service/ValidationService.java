@@ -32,10 +32,10 @@ public class ValidationService {
     public NicheRequestResponse validateModel(UUID requestId, UUID clientId, ValidateModelDto dto) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PROPOSED) {
-            throw new BusinessException("MODEL_NOT_AVAILABLE", "Modèle non encore disponible");
+            throw new BusinessException("MODEL_NOT_AVAILABLE", "The model is not available yet.");
         }
 
         if (dto.accepted()) {
@@ -51,7 +51,7 @@ public class ValidationService {
         }
 
         if (dto.rejectionReason() == null || dto.rejectionReason().isBlank()) {
-            throw new BusinessException("REJECTION_REASON_REQUIRED", "La raison du refus est obligatoire");
+            throw new BusinessException("REJECTION_REASON_REQUIRED", "A rejection reason is required.");
         }
 
         nr.setStatus(NicheStatus.REJECTED);
@@ -84,7 +84,7 @@ public class ValidationService {
     public NicheRequestResponse skipModelValidation(UUID requestId, UUID clientId) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() == NicheStatus.PENDING) {
             if (!Boolean.TRUE.equals(nr.getBotConfirmed())) {
@@ -93,7 +93,7 @@ public class ValidationService {
             }
         } else if (nr.getStatus() != NicheStatus.PROPOSED) {
             throw new BusinessException("CANNOT_SKIP_MODEL",
-                    "Impossible d'ignorer la validation dans cet état");
+                    "Validation cannot be skipped right now.");
         }
 
         nr.setStatus(NicheStatus.VALIDATED);

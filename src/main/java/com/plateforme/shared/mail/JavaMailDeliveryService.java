@@ -1,5 +1,6 @@
 package com.plateforme.shared.mail;
 
+import com.plateforme.shared.util.LogMasking;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -31,7 +32,7 @@ public class JavaMailDeliveryService implements MailDeliveryService {
         if (from.isBlank()) {
             log.error(
                     "Email non envoyé : configurez app.mail.from (MAIL_FROM) ou spring.mail.username comme expéditeur. to={} subject={}",
-                    to,
+                    LogMasking.email(to),
                     subject);
             return;
         }
@@ -43,9 +44,9 @@ public class JavaMailDeliveryService implements MailDeliveryService {
             helper.setSubject(subject);
             helper.setText(body, false);
             mailSender.send(msg);
-            log.info("Email envoyé à {} sujet={}", to, subject);
+            log.info("Email envoyé à {} sujet={}", LogMasking.email(to), subject);
         } catch (Exception e) {
-            log.error("Échec envoi email à {} sujet={}", to, subject, e);
+            log.error("Échec envoi email à {} sujet={}", LogMasking.email(to), subject, e);
         }
     }
 

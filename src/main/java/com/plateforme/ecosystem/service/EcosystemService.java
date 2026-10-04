@@ -53,11 +53,11 @@ public class EcosystemService {
     public NicheRequestResponse submitNicheRequest(UUID clientId, NicheRequestFormDto dto) {
         User client = userRepository.findByIdAndDeletedAtIsNull(clientId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Client introuvable : " + clientId));
+                        "Client not found."));
 
         for (String p : dto.platforms()) {
             if (!ALLOWED_PLATFORMS.contains(p)) {
-                throw new BusinessException("INVALID_PLATFORM", "Plateforme non autorisée : " + p);
+                throw new BusinessException("INVALID_PLATFORM", "This platform is not allowed.");
             }
         }
 
@@ -92,11 +92,11 @@ public class EcosystemService {
 
     public String uploadRefFile(UUID clientId, UUID requestId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("FILE_REQUIRED", "Fichier requis");
+            throw new BusinessException("FILE_REQUIRED", "Please choose a file.");
         }
         String ct = file.getContentType();
         if (ct == null || !ct.equalsIgnoreCase("video/mp4")) {
-            throw new BusinessException("INVALID_FILE_TYPE", "Seuls les fichiers MP4 sont acceptés");
+            throw new BusinessException("INVALID_FILE_TYPE", "Only MP4 files are accepted.");
         }
         if (file.getSize() > MAX_REF_MP4_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale 500 Mo");
@@ -104,11 +104,11 @@ public class EcosystemService {
 
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable ou accès refusé"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PENDING) {
             throw new BusinessException("NICHE_REQUEST_INVALID_STATE",
-                    "Référence fichier uniquement en statut PENDING");
+                    "A file reference can only be added while the request is pending.");
         }
 
         String key = "refs/" + requestId + "/" + UUID.randomUUID() + "-" + Objects.requireNonNullElse(file.getOriginalFilename(), "ref.mp4");
@@ -120,18 +120,18 @@ public class EcosystemService {
             return url;
         } catch (Exception e) {
             log.error("Échec upload référence : {}", e.getMessage());
-            throw new BusinessException("UPLOAD_FAILED", "Impossible d'enregistrer le fichier");
+            throw new BusinessException("UPLOAD_FAILED", "Unable to save the file. Please try again.");
         }
     }
 
     public NicheRequestResponse confirmBotChat(UUID requestId, UUID clientId) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PENDING) {
             throw new BusinessException("NICHE_REQUEST_INVALID_STATE",
-                    "Confirmation bot impossible dans cet état");
+                    "This request cannot be confirmed right now.");
         }
 
         nr.setBotConfirmed(true);
@@ -176,18 +176,18 @@ public class EcosystemService {
     public NicheRequestResponse getRequestDetail(UUID requestId, UUID clientId) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
         return toResponse(nr, scheduledConfigRepository.findByNicheRequest_Id(nr.getId()).orElse(null));
     }
 
     public void cancelRequest(UUID requestId, UUID clientId) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PENDING && nr.getStatus() != NicheStatus.PROPOSED) {
             throw new BusinessException("NICHE_REQUEST_CANNOT_CANCEL",
-                    "Annulation possible uniquement pour PENDING ou PROPOSED");
+                    "Only pending or proposed requests can be cancelled.");
         }
 
         nr.setDeletedAt(LocalDateTime.now());
@@ -272,7 +272,7 @@ public class EcosystemService {
         try {
             return RefType.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new BusinessException("INVALID_REF_TYPE", "refType doit être MCT, URL ou MP4");
+            throw new BusinessException("INVALID_REF_TYPE", "The reference type must be MCT, URL or MP4.");
         }
     }
 
@@ -284,13 +284,13 @@ public class EcosystemService {
             case MCT -> {
                 String code = dto.refMctCode();
                 if (code == null || !code.matches("MCT-[A-Z0-9]{4}")) {
-                    throw new BusinessException("INVALID_MCT_CODE", "Code modèle invalide (format MCT-XXXX)");
+                    throw new BusinessException("INVALID_MCT_CODE", "Invalid model code. Use the MCT-XXXX format.");
                 }
             }
             case URL -> {
                 String url = dto.refExternalUrl();
                 if (url == null || url.isBlank()) {
-                    throw new BusinessException("URL_REQUIRED", "URL requise pour refType URL");
+                    throw new BusinessException("URL_REQUIRED", "A URL is required for this reference type.");
                 }
                 validateHttpUrl(url);
             }
@@ -305,10 +305,10 @@ public class EcosystemService {
             URI uri = URI.create(url.trim());
             String scheme = uri.getScheme();
             if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-                throw new BusinessException("INVALID_URL", "URL http ou https requise");
+                throw new BusinessException("INVALID_URL", "The URL must start with http or https.");
             }
         } catch (IllegalArgumentException e) {
-            throw new BusinessException("INVALID_URL", "URL invalide");
+            throw new BusinessException("INVALID_URL", "Invalid URL.");
         }
     }
 }

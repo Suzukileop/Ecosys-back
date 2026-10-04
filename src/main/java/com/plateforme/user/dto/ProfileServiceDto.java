@@ -13,7 +13,7 @@ public record ProfileServiceDto(
         List<String> tasks,
         /** Must match one of the creator's profile specialties. */
         String specialty,
-        /** FIXED | FROM | QUOTE */
+        /** FIXED | FROM | QUOTE | FREE */
         String pricingType,
         String coverImageUrl,
         /** ACTIVE | PAUSED | ARCHIVED */

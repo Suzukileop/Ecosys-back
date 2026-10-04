@@ -5,12 +5,18 @@ import com.plateforme.marketplace.dto.ContentPostRequest;
 import com.plateforme.marketplace.dto.ContentPostResponse;
 import com.plateforme.marketplace.dto.MinimalUserDto;
 import com.plateforme.marketplace.entity.ContentPost;
+import com.plateforme.marketplace.entity.ContentTargetType;
+import com.plateforme.marketplace.entity.ReactionType;
+import com.plateforme.marketplace.repository.ContentCommentRepository;
 import com.plateforme.marketplace.repository.ContentPostRepository;
+import com.plateforme.marketplace.repository.ContentReactionRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.CreatorSearchExpand;
 import com.plateforme.user.service.FollowerPublishNotifyService;
+import com.plateforme.user.service.SpecialtyTaxonomy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -39,6 +45,8 @@ public class ContentPostService {
     private static final Set<String> ALLOWED_MEDIA_TYPES = Set.of("FILE", "GIF");
 
     private final ContentPostRepository contentPostRepository;
+    private final ContentCommentRepository contentCommentRepository;
+    private final ContentReactionRepository contentReactionRepository;
     private final UserRepository userRepository;
     private final CreatorProfileRepository creatorProfileRepository;
     private final FollowerPublishNotifyService followerPublishNotifyService;
@@ -47,7 +55,7 @@ public class ContentPostService {
     public ContentPostResponse createPost(UUID creatorId, ContentPostRequest req) {
         User creator = userRepository.findByIdAndDeletedAtIsNull(creatorId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + creatorId));
+                        "User not found."));
 
         validateRequest(req, creatorId);
         List<UUID> taggedIds = normalizeTaggedUserIds(req.taggedUserIds(), creatorId);
@@ -88,7 +96,7 @@ public class ContentPostService {
     public void deletePost(UUID creatorId, UUID postId) {
         ContentPost post = contentPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Contenu introuvable : " + postId));
+                        "Content not found."));
 
         UUID ownerId = post.getCreator() != null ? post.getCreator().getId() : null;
         if (!Objects.equals(ownerId, creatorId)) {
@@ -107,11 +115,11 @@ public class ContentPostService {
         int updated = contentPostRepository.restoreFromTrash(creatorId, postId);
         if (updated == 0) {
             throw new BusinessException("CONTENT_POST_NOT_FOUND",
-                    "Contenu introuvable dans la corbeille : " + postId);
+                    "This content is not in the trash.");
         }
         ContentPost post = contentPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Contenu introuvable : " + postId));
+                        "Content not found."));
         assertOwner(post, creatorId);
         long portfolioCount = contentPostRepository.countActiveByCreator_Id(creatorId);
         log.info("Contenu restauré depuis corbeille id={} par créateur={}", postId, creatorId);
@@ -122,12 +130,12 @@ public class ContentPostService {
     public void permanentDeletePost(UUID creatorId, UUID postId) {
         if (contentPostRepository.findTrashById(creatorId, postId).isEmpty()) {
             throw new BusinessException("CONTENT_POST_NOT_FOUND",
-                    "Contenu introuvable dans la corbeille : " + postId);
+                    "This content is not in the trash.");
         }
         int deleted = contentPostRepository.permanentDelete(creatorId, postId);
         if (deleted == 0) {
             throw new BusinessException("CONTENT_POST_NOT_FOUND",
-                    "Contenu introuvable dans la corbeille : " + postId);
+                    "This content is not in the trash.");
         }
         log.info("Contenu supprimé définitivement id={} par créateur={}", postId, creatorId);
     }
@@ -147,7 +155,7 @@ public class ContentPostService {
     public ContentPostResponse unarchivePost(UUID creatorId, UUID postId) {
         ContentPost post = contentPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Contenu introuvable : " + postId));
+                        "Content not found."));
         assertOwner(post, creatorId);
         if (post.getArchivedAt() == null) {
             throw new BusinessException("CONTENT_NOT_ARCHIVED", "This content is not archived");
@@ -206,7 +214,7 @@ public class ContentPostService {
     public ContentPostResponse updatePost(UUID creatorId, UUID postId, ContentPostRequest req) {
         ContentPost post = contentPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Content not found: " + postId));
+                        "Content not found."));
 
         UUID ownerId = post.getCreator() != null ? post.getCreator().getId() : null;
         if (!Objects.equals(ownerId, creatorId)) {
@@ -232,7 +240,7 @@ public class ContentPostService {
     public ContentPostResponse getPublicPostById(UUID postId) {
         ContentPost post = contentPostRepository.findPublicById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Public content not found: " + postId));
+                        "Content not found."));
         UUID creatorId = post.getCreator().getId();
         long portfolioCount = contentPostRepository.countActiveByCreator_Id(creatorId);
         return toResponse(post, portfolioCount);
@@ -242,7 +250,7 @@ public class ContentPostService {
     public ContentPostResponse getMyPostById(UUID creatorId, UUID postId) {
         ContentPost post = contentPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Content not found: " + postId));
+                        "Content not found."));
 
         assertOwner(post, creatorId);
 
@@ -254,23 +262,67 @@ public class ContentPostService {
     public void incrementView(UUID postId) {
         ContentPost post = contentPostRepository.findPublicById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Public content not found: " + postId));
+                        "Content not found."));
         int views = post.getViews() != null ? post.getViews() : 0;
         post.setViews(views + 1);
         contentPostRepository.save(post);
     }
 
     @Transactional(readOnly = true)
-    public Page<ContentPostResponse> getPublicPosts(UUID creatorId, String genre, String keyword, Pageable pageable) {
-        String q = keyword != null && !keyword.isBlank() ? keyword.trim() : null;
+    public Page<ContentPostResponse> getPublicPosts(
+            UUID creatorId, String genre, String keyword, Pageable pageable, UUID viewerId) {
         String g = genre != null && !genre.isBlank() ? genre.trim() : null;
+        String q = SpecialtyTaxonomy.sanitizeLabel(keyword);
+        String qCanonical = "";
+        String terms = "";
+        if (q != null) {
+            String canonical = SpecialtyTaxonomy.canonicalize(q);
+            if (canonical != null && !canonical.equalsIgnoreCase(q)) {
+                qCanonical = canonical;
+            }
+            terms = CreatorSearchExpand.expandedTermsPipe(q);
+            if (terms.isEmpty()) {
+                terms = q;
+            }
+        }
 
-        return contentPostRepository.findPublicFiltered(creatorId, g, q, pageable)
-                .map(p -> {
-                    UUID cid = p.getCreator().getId();
-                    long portfolioCount = contentPostRepository.countActiveByCreator_Id(cid);
-                    return toResponse(p, portfolioCount);
-                });
+        Page<ContentPost> page =
+                contentPostRepository.findPublicFiltered(creatorId, g, q != null ? q : "", qCanonical, terms, pageable);
+        if (page.isEmpty()) {
+            return page.map(p -> toResponse(p, 0L));
+        }
+
+        /*
+         * Everything the cards need, resolved once for the whole page. Done per post this was a
+         * COUNT per card for the portfolio total, plus — because the counts were missing from the
+         * payload entirely — two HTTP round trips per card from the browser for the comment count
+         * and the viewer's own reaction.
+         */
+        List<UUID> postIds = page.getContent().stream().map(ContentPost::getId).toList();
+        Set<UUID> creatorIds = page.getContent().stream()
+                .map(post -> post.getCreator().getId())
+                .collect(Collectors.toSet());
+
+        Map<UUID, Long> portfolioCounts = new LinkedHashMap<>();
+        for (UUID cid : creatorIds) {
+            portfolioCounts.put(cid, contentPostRepository.countActiveByCreator_Id(cid));
+        }
+
+        Map<UUID, Long> commentCounts = new LinkedHashMap<>();
+        for (Object[] row : contentCommentRepository.countVisibleByTargetIds(ContentTargetType.POST, postIds)) {
+            commentCounts.put((UUID) row[0], (Long) row[1]);
+        }
+
+        Set<UUID> likedByViewer = viewerId == null
+                ? Set.of()
+                : Set.copyOf(contentReactionRepository.findTargetIdsByUser_IdAndTargetTypeAndType(
+                        viewerId, ContentTargetType.POST, ReactionType.LIKE));
+
+        return page.map(post -> toResponse(
+                post,
+                portfolioCounts.getOrDefault(post.getCreator().getId(), 0L),
+                commentCounts.getOrDefault(post.getId(), 0L),
+                likedByViewer.contains(post.getId()) ? ReactionType.LIKE.name() : null));
     }
 
     @Transactional(readOnly = true)
@@ -284,6 +336,12 @@ public class ContentPostService {
     }
 
     public ContentPostResponse toResponse(ContentPost post, long portfolioCount) {
+        /* null counts tell the client to fetch them itself rather than render a wrong zero. */
+        return toResponse(post, portfolioCount, null, null);
+    }
+
+    public ContentPostResponse toResponse(
+            ContentPost post, long portfolioCount, Long commentCount, String viewerReaction) {
         User creator = post.getCreator();
         var profile = creatorProfileRepository.findByUserId(creator.getId()).orElse(null);
         String appRole = profile != null ? profile.getAppRole() : null;
@@ -326,14 +384,16 @@ public class ContentPostService {
                 post.getLikes() != null ? post.getLikes() : 0,
                 portfolioCount,
                 post.getCreatedAt(),
-                minimal
+                minimal,
+                commentCount,
+                viewerReaction
         );
     }
 
     private ContentPost requireActivePost(UUID creatorId, UUID postId) {
         ContentPost post = contentPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND",
-                        "Contenu introuvable : " + postId));
+                        "Content not found."));
         assertOwner(post, creatorId);
         if (post.getArchivedAt() != null) {
             throw new BusinessException("CONTENT_ARCHIVED", "Archived content cannot be modified this way");
@@ -349,12 +409,15 @@ public class ContentPostService {
     }
 
     private void validateRequest(ContentPostRequest req, UUID creatorId) {
-        if (req.mediaUrl() == null || req.mediaUrl().isBlank()) {
-            throw new BusinessException("MEDIA_REQUIRED", "Media file is required");
+        boolean hasMedia = req.mediaUrl() != null && !req.mediaUrl().isBlank();
+        boolean hasText = (req.title() != null && !req.title().isBlank())
+                || (req.description() != null && !req.description().isBlank());
+        if (!hasMedia && !hasText) {
+            throw new BusinessException("CONTENT_EMPTY", "Write something or add a media file.");
         }
 
         if (countStringListItems(req.toolsUsed()) > MAX_LIST_ITEMS) {
-            throw new BusinessException("TOOLS_USED_LIMIT", "Maximum 10 outils autorisés");
+            throw new BusinessException("TOOLS_USED_LIMIT", "A maximum of 10 tools is allowed.");
         }
 
         if (countStringListItems(req.tags()) > MAX_LIST_ITEMS) {
@@ -363,7 +426,7 @@ public class ContentPostService {
 
         String mediaType = normalizeMediaType(req.mediaType());
         if (!ALLOWED_MEDIA_TYPES.contains(mediaType)) {
-            throw new BusinessException("INVALID_MEDIA_TYPE", "Unsupported media type: " + mediaType);
+            throw new BusinessException("INVALID_MEDIA_TYPE", "Unsupported media type.");
         }
 
         List<UUID> tagged = req.taggedUserIds() != null ? req.taggedUserIds() : List.of();

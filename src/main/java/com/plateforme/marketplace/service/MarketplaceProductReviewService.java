@@ -216,6 +216,12 @@ public class MarketplaceProductReviewService {
                 .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND", "Product not found."));
     }
 
+    /** Recomputes a product's rating after reviews were removed outside this service (account erasure). */
+    @Transactional
+    public void refreshProductRating(UUID productId) {
+        productRepository.findById(productId).ifPresent(this::refreshProductRating);
+    }
+
     private void refreshProductRating(MarketplaceProduct product) {
         long count = reviewRepository.countLatestReviewers(product.getId());
         Double avg = reviewRepository.averageLatestRatingPerUser(product.getId());

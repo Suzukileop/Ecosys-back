@@ -22,6 +22,7 @@ import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorResponseTimeService;
+import com.plateforme.user.service.UserSettingsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -59,6 +60,7 @@ public class MessagingService {
     private final MessagingParticipantGuard participantGuard;
     private final NotificationService notificationService;
     private final CreatorResponseTimeService creatorResponseTimeService;
+    private final UserSettingsService userSettingsService;
 
     @Transactional
     public ConversationSummaryDto findOrCreateConversation(UUID currentUserId, UUID otherUserId) {
@@ -75,7 +77,14 @@ public class MessagingService {
                 .findFirst()
                 .map(conversation -> toSummary(conversation, currentUserId,
                         loadParticipantsByConversation(conversation.getId())))
-                .orElseGet(() -> createDirectConversation(currentUser, otherUser));
+                .orElseGet(() -> {
+                    if (userSettingsService.rejectsNewMessagesFrom(otherUserId, currentUserId)) {
+                        throw new BusinessException(
+                                "MESSAGES_NOT_ALLOWED",
+                                "This person isn't accepting new messages right now.");
+                    }
+                    return createDirectConversation(currentUser, otherUser);
+                });
     }
 
     @Transactional
@@ -1187,7 +1196,7 @@ public class MessagingService {
     private Conversation requireConversation(UUID conversationId) {
         return conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new BusinessException("CONVERSATION_NOT_FOUND",
-                        "Conversation introuvable : " + conversationId));
+                        "Conversation not found."));
     }
 
     private MessageAttachment requireAttachment(UUID conversationId, UUID attachmentId) {
@@ -1214,7 +1223,7 @@ public class MessagingService {
 
     private User requireActiveUser(UUID userId) {
         return userRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable : " + userId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
     }
 
     private ConversationSummaryDto toSummary(

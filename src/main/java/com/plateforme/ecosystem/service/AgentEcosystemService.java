@@ -61,7 +61,7 @@ public class AgentEcosystemService {
     public NicheRequestResponse getRequestForAgent(UUID requestId) {
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
         return ecosystemService.toResponse(nr,
                 scheduledConfigRepository.findByNicheRequest_Id(nr.getId()).orElse(null));
     }
@@ -69,15 +69,15 @@ public class AgentEcosystemService {
     public NicheRequestResponse proposeModel(UUID requestId, UUID agentId, AgentProposeDto dto) {
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PENDING || !Boolean.TRUE.equals(nr.getBotConfirmed())) {
             throw new BusinessException("NICHE_REQUEST_INVALID_STATE",
-                    "Proposition impossible : la demande doit être PENDING avec bot confirmé");
+                    "This request cannot receive a proposal yet.");
         }
 
         User agent = userRepository.findByIdAndDeletedAtIsNull(agentId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Agent introuvable : " + agentId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Agent not found."));
 
         nr.setAgent(agent);
         nr.setDemoContentUrl(dto.demoContentUrl().trim());
@@ -103,16 +103,16 @@ public class AgentEcosystemService {
 
     public String uploadDemoContent(UUID requestId, UUID agentId, MultipartFile file) {
         User agent = userRepository.findByIdAndDeletedAtIsNull(agentId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         boolean allowedRole = agent.getRoles().stream()
                 .anyMatch(r -> Objects.equals(r.getName(), "ROLE_AGENT") || Objects.equals(r.getName(), "ROLE_ADMIN"));
         if (!allowedRole) {
-            throw new BusinessException("AGENT_ROLE_REQUIRED", "Rôle agent ou admin requis");
+            throw new BusinessException("AGENT_ROLE_REQUIRED", "An agent or admin role is required.");
         }
 
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("FILE_REQUIRED", "Fichier requis");
+            throw new BusinessException("FILE_REQUIRED", "Please choose a file.");
         }
         if (file.getSize() > MAX_DEMO_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale 500 Mo");
@@ -120,11 +120,11 @@ public class AgentEcosystemService {
 
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PENDING || !Boolean.TRUE.equals(nr.getBotConfirmed())) {
             throw new BusinessException("NICHE_REQUEST_INVALID_STATE",
-                    "Upload démo impossible dans cet état");
+                    "A demo cannot be uploaded for this request right now.");
         }
 
         String ct = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
@@ -136,27 +136,27 @@ public class AgentEcosystemService {
             return url;
         } catch (Exception e) {
             log.error("Upload démo échoué : {}", e.getMessage());
-            throw new BusinessException("UPLOAD_FAILED", "Impossible d'enregistrer le fichier de démonstration");
+            throw new BusinessException("UPLOAD_FAILED", "Unable to save the demo file. Please try again.");
         }
     }
 
     public String uploadModelVideo(UUID requestId, UUID agentId, MultipartFile file) {
         User agent = userRepository.findByIdAndDeletedAtIsNull(agentId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         boolean allowedRole = agent.getRoles().stream()
                 .anyMatch(r -> Objects.equals(r.getName(), "ROLE_AGENT") || Objects.equals(r.getName(), "ROLE_ADMIN"));
         if (!allowedRole) {
-            throw new BusinessException("AGENT_ROLE_REQUIRED", "Rôle agent ou admin requis");
+            throw new BusinessException("AGENT_ROLE_REQUIRED", "An agent or admin role is required.");
         }
 
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("FILE_REQUIRED", "Fichier requis");
+            throw new BusinessException("FILE_REQUIRED", "Please choose a file.");
         }
 
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
 
         String key = "models/" + requestId + "/" + UUID.randomUUID() + ".mp4";
         try {
@@ -169,7 +169,7 @@ public class AgentEcosystemService {
             throw e;
         } catch (Exception e) {
             log.error("Upload vidéo modèle échoué : {}", e.getMessage());
-            throw new BusinessException("UPLOAD_FAILED", "Impossible d'enregistrer la vidéo modèle");
+            throw new BusinessException("UPLOAD_FAILED", "Unable to save the model video. Please try again.");
         }
     }
 
@@ -201,7 +201,7 @@ public class AgentEcosystemService {
         validatePlatformForNiche(nr, dto.platform());
 
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("FILE_REQUIRED", "Fichier requis");
+            throw new BusinessException("FILE_REQUIRED", "Please choose a file.");
         }
         if (file.getSize() > MAX_DELIVERY_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale 500 Mo");
@@ -215,12 +215,12 @@ public class AgentEcosystemService {
             contentUrl = storageService.uploadPublicFile(key, file.getInputStream(), file.getSize(), ct);
         } catch (Exception e) {
             log.error("Upload contenu niche échoué : {}", e.getMessage());
-            throw new BusinessException("UPLOAD_FAILED", "Impossible d'enregistrer le contenu");
+            throw new BusinessException("UPLOAD_FAILED", "Unable to save the content. Please try again.");
         }
 
         ScheduledConfig cfg = scheduledConfigRepository.findByNicheRequest_Id(nr.getId())
                 .orElseThrow(() -> new BusinessException("SCHEDULE_CONFIG_NOT_FOUND",
-                        "Configuration planificateur introuvable"));
+                        "Schedule configuration not found."));
 
         LocalDateTime now = LocalDateTime.now();
         int deliveryNumber = scheduledPostRepository.findMaxDeliveryNumberByNicheRequestId(requestId) + 1;
@@ -261,10 +261,10 @@ public class AgentEcosystemService {
     private NicheRequest loadActiveNicheForDelivery(UUID requestId) {
         NicheRequest nr = nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable : " + requestId));
+                        "Request not found."));
         if (nr.getStatus() != NicheStatus.ACTIVE) {
             throw new BusinessException("NICHE_NOT_ACTIVE",
-                    "Seules les niches actives acceptent de nouveaux contenus");
+                    "Only active niches accept new content.");
         }
         return nr;
     }
@@ -278,18 +278,18 @@ public class AgentEcosystemService {
                 .anyMatch(p -> Objects.equals(p, platformName));
         if (!allowed) {
             throw new BusinessException("INVALID_PLATFORM",
-                    "Plateforme non autorisée pour cette niche : " + platformName);
+                    "This platform is not allowed for this niche.");
         }
     }
 
     private void assertAgentRole(UUID agentId) {
         User agent = userRepository.findByIdAndDeletedAtIsNull(agentId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Utilisateur introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
         boolean allowedRole = agent.getRoles().stream()
                 .anyMatch(r -> Objects.equals(r.getName(), "ROLE_AGENT")
                         || Objects.equals(r.getName(), "ROLE_ADMIN"));
         if (!allowedRole) {
-            throw new BusinessException("AGENT_ROLE_REQUIRED", "Rôle agent ou admin requis");
+            throw new BusinessException("AGENT_ROLE_REQUIRED", "An agent or admin role is required.");
         }
     }
 

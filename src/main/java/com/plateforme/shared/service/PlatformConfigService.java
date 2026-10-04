@@ -37,7 +37,7 @@ public class PlatformConfigService {
 
         PlatformConfig row = platformConfigRepository.findById(TARIF_KEY)
                 .orElseThrow(() -> new BusinessException("PLATFORM_CONFIG_MISSING",
-                        "Configuration tarifaire introuvable"));
+                        "Pricing configuration not found."));
 
         int cents = Integer.parseInt(row.getConfigValue().trim());
         writeCachedTarif(cents);
@@ -68,7 +68,7 @@ public class PlatformConfigService {
     @Transactional
     public void updateTarifUnitaireCents(int cents) {
         if (cents <= 0 || cents > 1_000_000) {
-            throw new BusinessException("INVALID_TARIF", "Tarif unitaire invalide");
+            throw new BusinessException("INVALID_TARIF", "Invalid unit price.");
         }
         PlatformConfig row = platformConfigRepository.findById(TARIF_KEY).orElseGet(() -> {
             PlatformConfig p = new PlatformConfig();

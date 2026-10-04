@@ -1,5 +1,6 @@
 package com.plateforme.marketplace.service;
 
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.CreatorProfileVisit;
@@ -7,6 +8,7 @@ import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.CreatorProfileVisitRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.UserSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,6 +32,8 @@ class CreatorProfileViewServiceTest {
     @Mock CreatorProfileVisitRepository visitRepository;
     @Mock UserRepository userRepository;
     @Mock NotificationService notificationService;
+    @Mock PublicMediaUrlResolver publicMediaUrlResolver;
+    @Mock UserSettingsService userSettingsService;
 
     CreatorProfileViewService service;
 
@@ -41,7 +45,8 @@ class CreatorProfileViewServiceTest {
     @BeforeEach
     void setUp() {
         service = new CreatorProfileViewService(
-                creatorProfileRepository, visitRepository, userRepository, notificationService);
+                creatorProfileRepository, visitRepository, userRepository, notificationService,
+                publicMediaUrlResolver, userSettingsService);
         creatorId = UUID.randomUUID();
         viewerId = UUID.randomUUID();
         creator = new User();

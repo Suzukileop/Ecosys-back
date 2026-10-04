@@ -72,6 +72,6 @@ public class UserProfileService {
     private User requireUser(UUID userId) {
         return userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + userId));
+                        "User not found."));
     }
 }

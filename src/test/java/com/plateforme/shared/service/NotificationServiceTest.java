@@ -9,6 +9,7 @@ import com.plateforme.shared.repository.NotificationRepository;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.service.UserSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,9 @@ class NotificationServiceTest {
 
     @Mock
     private MailDeliveryService mailDeliveryService;
+
+    @Mock
+    private UserSettingsService userSettingsService;
 
     @InjectMocks
     private NotificationService notificationService;

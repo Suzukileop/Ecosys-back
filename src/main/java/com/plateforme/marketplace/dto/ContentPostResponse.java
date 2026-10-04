@@ -26,5 +26,12 @@ public record ContentPostResponse(
         int likes,
         long portfolioCount,
         LocalDateTime createdAt,
-        MinimalUserDto creator
+        MinimalUserDto creator,
+        /**
+         * Supplied by the public feed so a card does not have to fetch them one by one.
+         * {@code null} on routes that do not compute them — the client then falls back to its
+         * own request rather than rendering a wrong zero.
+         */
+        Long commentCount,
+        String viewerReaction
 ) {}

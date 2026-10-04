@@ -1,6 +1,7 @@
 package com.plateforme.ecosystem.storage;
 
 import com.plateforme.shared.exception.BusinessException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -13,12 +14,18 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.r2", name = "enabled", havingValue = "false", matchIfMissing = true)
 public class LocalDevStorageService implements StorageService {
+
+    private final StorageSignature storageSignature;
 
     private static final long MAX_VIDEO_BYTES = 500L * 1024 * 1024;
     private static final long MAX_IMAGE_BYTES = 30L * 1024 * 1024;
@@ -53,13 +60,7 @@ public class LocalDevStorageService implements StorageService {
     public String uploadFile(MultipartFile file, String objectKey) throws IOException {
         validateMultipart(file, objectKey);
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
-        byte[] payload = file.getBytes();
-        var normalized = DisplayImageNormalizer.maybeNormalize(payload, contentType);
-        if (normalized.isPresent()) {
-            payload = normalized.get().bytes();
-            contentType = normalized.get().contentType();
-        }
-        return uploadPublicFile(objectKey, new java.io.ByteArrayInputStream(payload), payload.length, contentType);
+        return uploadPublicImage(objectKey, file.getBytes(), contentType);
     }
 
     @Override
@@ -76,6 +77,9 @@ public class LocalDevStorageService implements StorageService {
     public String uploadPrivateFile(MultipartFile file, String objectKey) throws IOException {
         validateMarketplacePrivateFile(file);
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+        if (ImageRenditions.isSupported(contentType)) {
+            return uploadPrivateImage(objectKey, file.getBytes(), contentType);
+        }
         return uploadPrivateFile(objectKey, file.getInputStream(), file.getSize(), contentType);
     }
 
@@ -83,24 +87,74 @@ public class LocalDevStorageService implements StorageService {
     public void deleteFile(String objectKey) throws IOException {
         Path target = resolveTarget(objectKey);
         Files.deleteIfExists(target);
+        /* Derivatives live beside the canonical file under a "__w<width>" suffix. */
+        for (int width : ImageRenditions.DERIVATIVE_WIDTHS) {
+            for (String type : new String[] {"image/jpeg", "image/png"}) {
+                Files.deleteIfExists(resolveTarget(ImageRenditions.derivativeKey(objectKey, width, type)));
+            }
+        }
         log.info("Fichier local supprimé clé={}", objectKey);
     }
 
     @Override
+    public int deleteByPrefix(String prefix) throws IOException {
+        requireFolderPrefix(prefix);
+        Path folder = resolveTarget(prefix);
+        if (!Files.isDirectory(folder)) {
+            return 0;
+        }
+        List<Path> paths;
+        try (Stream<Path> walk = Files.walk(folder)) {
+            paths = walk.sorted(Comparator.reverseOrder()).toList();
+        }
+        int deleted = 0;
+        for (Path path : paths) {
+            boolean isFile = Files.isRegularFile(path);
+            Files.deleteIfExists(path);
+            if (isFile) {
+                deleted++;
+            }
+        }
+        log.info("Dossier local supprimé préfixe={} fichiers={}", prefix, deleted);
+        return deleted;
+    }
+
+    static void requireFolderPrefix(String prefix) throws IOException {
+        if (prefix == null || prefix.isBlank() || !prefix.endsWith("/") || prefix.split("/").length < 2) {
+            throw new IOException("Préfixe invalide : " + prefix);
+        }
+    }
+
+    @Override
     public String generateSignedUrl(String objectKey, int expiryMinutes) throws IOException {
-        return buildPublicUrl(objectKey);
+        return signIfPrivate(UriComponentsBuilder.fromUriString(buildPublicUrl(objectKey)), objectKey, expiryMinutes)
+                .build()
+                .toUriString();
     }
 
     @Override
     public String generateSignedDownloadUrl(String objectKey, String downloadFilename, int expiryMinutes)
             throws IOException {
-        return UriComponentsBuilder.fromUriString(buildPublicUrl(objectKey))
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(buildPublicUrl(objectKey))
                 .queryParam("disposition", "attachment")
                 .queryParam("filename", downloadFilename != null && !downloadFilename.isBlank()
                         ? downloadFilename
-                        : "download")
-                .build()
-                .toUriString();
+                        : "download");
+        return signIfPrivate(builder, objectKey, expiryMinutes).build().toUriString();
+    }
+
+    /**
+     * Private keys leave with a time-limited signature; public ones stay bare so their URLs remain
+     * stable and cacheable. See {@link StorageSignature}.
+     */
+    private UriComponentsBuilder signIfPrivate(UriComponentsBuilder builder, String objectKey, int expiryMinutes) {
+        if (!StorageSignature.isPrivateKey(objectKey)) {
+            return builder;
+        }
+        long expiresAt = storageSignature.expiryFromNow(expiryMinutes);
+        return builder
+                .queryParam(StorageSignature.EXPIRY_PARAM, expiresAt)
+                .queryParam(StorageSignature.SIGNATURE_PARAM, storageSignature.sign(objectKey, expiresAt));
     }
 
     private Path resolveTarget(String objectKey) throws IOException {
@@ -125,7 +179,7 @@ public class LocalDevStorageService implements StorageService {
 
     private void validateMultipart(MultipartFile file, String objectKey) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("FILE_REQUIRED", "Fichier requis");
+            throw new BusinessException("FILE_REQUIRED", "Please choose a file.");
         }
         if (objectKey != null && objectKey.startsWith("marketplace/public/")) {
             validateMarketplaceThumbnail(file);
@@ -152,10 +206,10 @@ public class LocalDevStorageService implements StorageService {
         if (videoPath) {
             if (!VIDEO_TYPES.contains(ct)) {
                 throw new BusinessException("INVALID_FILE_TYPE",
-                        "Types vidéo acceptés : video/mp4, video/quicktime, video/webm");
+                        "Supported video formats: MP4, MOV and WebM.");
             }
             if (file.getSize() > MAX_VIDEO_BYTES) {
-                throw new BusinessException("FILE_TOO_LARGE", "Taille maximale vidéo : 500 Mo");
+                throw new BusinessException("FILE_TOO_LARGE", "Videos must be 500 MB or less.");
             }
         } else if (audioPath) {
             if (file.getSize() > 50L * 1024 * 1024) {
@@ -164,7 +218,7 @@ public class LocalDevStorageService implements StorageService {
         } else {
             if (!IMAGE_TYPES.contains(ct)) {
                 throw new BusinessException("INVALID_FILE_TYPE",
-                        "Types image acceptés : image/jpeg, image/png, image/webp");
+                        "Supported image formats: JPEG, PNG and WebP.");
             }
             if (file.getSize() > MAX_IMAGE_BYTES) {
                 throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
@@ -188,13 +242,13 @@ public class LocalDevStorageService implements StorageService {
         boolean isVideo = VIDEO_TYPES.contains(ct);
         if (!isImage && !isVideo) {
             throw new BusinessException("INVALID_FILE_TYPE",
-                    "Miniature : image (jpeg, png, webp) ou vidéo (mp4, webm, mov)");
+                    "Thumbnails must be an image (JPEG, PNG, WebP) or a video (MP4, WebM, MOV).");
         }
         if (isImage && file.getSize() > MAX_IMAGE_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
         }
         if (isVideo && file.getSize() > MAX_THUMBNAIL_VIDEO_BYTES) {
-            throw new BusinessException("FILE_TOO_LARGE", "Vidéo miniature : max 25 Mo");
+            throw new BusinessException("FILE_TOO_LARGE", "Thumbnail videos must be 25 MB or less.");
         }
     }
 
@@ -202,7 +256,7 @@ public class LocalDevStorageService implements StorageService {
         String ct = file.getContentType() != null ? file.getContentType() : "";
         if (!IMAGE_TYPES.contains(ct)) {
             throw new BusinessException("INVALID_FILE_TYPE",
-                    "Photo de profil : image/jpeg, image/png ou image/webp");
+                    "Profile photos must be JPEG, PNG or WebP.");
         }
         if (file.getSize() > MAX_IMAGE_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
@@ -218,13 +272,13 @@ public class LocalDevStorageService implements StorageService {
                 || (file.getOriginalFilename() != null && file.getOriginalFilename().matches("(?i).+\\.(mp3|wav|aac|m4a|ogg|flac)$"));
         if (!isImage && !isVideo && !isPdf && !isAudio) {
             throw new BusinessException("INVALID_FILE_TYPE",
-                    "Média : image (jpeg, png, webp), vidéo (mp4, webm, mov), audio (mp3, wav, aac, ogg) ou PDF");
+                    "Supported media: images (JPEG, PNG, WebP), videos (MP4, WebM, MOV), audio (MP3, WAV, AAC, OGG) or PDF.");
         }
         if (isImage && file.getSize() > MAX_IMAGE_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
         }
         if (isVideo && file.getSize() > MAX_VIDEO_BYTES) {
-            throw new BusinessException("FILE_TOO_LARGE", "Taille maximale vidéo : 500 Mo");
+            throw new BusinessException("FILE_TOO_LARGE", "Videos must be 500 MB or less.");
         }
         if (isPdf && file.getSize() > MAX_CONTENT_PDF_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale PDF : 50 Mo");

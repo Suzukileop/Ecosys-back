@@ -61,7 +61,7 @@ public class DeepSeekBotService {
     public BotResponseDto sendBotMessage(UUID requestId, UUID clientId, String userMessageRaw) {
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.PENDING) {
             throw new BusinessException("NICHE_REQUEST_INVALID_STATE",
@@ -69,7 +69,7 @@ public class DeepSeekBotService {
         }
 
         User client = userRepository.findByIdAndDeletedAtIsNull(clientId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Client introuvable"));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "Client not found."));
 
         String roomId = "niche-" + requestId;
         String trimmed = userMessageRaw != null ? userMessageRaw.trim() : "";
@@ -122,7 +122,7 @@ public class DeepSeekBotService {
     public List<ChatMessageDto> getBotHistory(UUID requestId, UUID clientId) {
         nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
         String roomId = "niche-" + requestId;
         return chatMessageRepository.findByRoomIdOrderBySentAtAsc(roomId).stream()
                 .map(this::toDto)
@@ -136,7 +136,7 @@ public class DeepSeekBotService {
     public List<ChatMessageDto> getBotHistoryForAgent(UUID requestId) {
         nicheRequestRepository.findById(requestId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
         String roomId = "niche-" + requestId;
         return chatMessageRepository.findByRoomIdOrderBySentAtAsc(roomId).stream()
                 .map(this::toDto)

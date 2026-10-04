@@ -89,7 +89,7 @@ class CreatorPortfolioServiceTest {
                 .thenReturn(new ContentPostResponse(
                         post.getId(), "Title", null, null, "FILE", null, null, null,
                         List.of(), null, null, List.of(), List.of(), true, true, false, null,
-                        0, 0, 1L, null, null));
+                        0, 0, 1L, null, null, null, null));
 
         List<ContentPostResponse> result = creatorPortfolioService.updateCuratedPosts(
                 creatorId, new UpdatePortfolioRequest(List.of(post.getId())));

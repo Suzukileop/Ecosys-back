@@ -48,7 +48,7 @@ public record CreatorProfileDto(
         Integer yearsOfExperience,
         List<ProfileStrengthToolDto> strengthsToolsMastered,
         List<ProfileStrengthToolDto> profileStack,
-        CreatorReputationDto reputation,
+        long starCount,
         long profileVisits,
         String gender,
         String nationality,

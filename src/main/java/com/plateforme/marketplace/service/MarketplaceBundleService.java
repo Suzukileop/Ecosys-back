@@ -38,7 +38,7 @@ public class MarketplaceBundleService {
     @Transactional
     public BundleResponse createBundle(UUID creatorId, BundleRequest req) {
         User creator = userRepository.findByIdAndDeletedAtIsNull(creatorId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + creatorId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         if (req.productIds().isEmpty()) {
             throw new BusinessException("BUNDLE_EMPTY", "Bundle must contain at least one product");
@@ -95,7 +95,7 @@ public class MarketplaceBundleService {
         for (UUID productId : productIds) {
             MarketplaceProduct product = productRepository.findById(productId)
                     .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND",
-                            "Product not found: " + productId));
+                            "Product not found."));
             UUID ownerId = product.getCreator() != null ? product.getCreator().getId() : null;
             if (!Objects.equals(ownerId, creatorId)) {
                 throw new AccessDeniedException("Product " + productId + " does not belong to the current user");
@@ -126,7 +126,7 @@ public class MarketplaceBundleService {
     private MarketplaceBundle requireOwnedBundle(UUID creatorId, UUID bundleId) {
         MarketplaceBundle bundle = bundleRepository.findById(bundleId)
                 .orElseThrow(() -> new BusinessException("BUNDLE_NOT_FOUND",
-                        "Bundle not found: " + bundleId));
+                        "Bundle not found."));
         UUID ownerId = bundle.getCreator() != null ? bundle.getCreator().getId() : null;
         if (!Objects.equals(ownerId, creatorId)) {
             throw new AccessDeniedException("This bundle does not belong to the current user");

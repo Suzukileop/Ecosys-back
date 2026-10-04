@@ -10,7 +10,7 @@ import com.plateforme.user.repository.CreatorProfileVisitRepository;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorFollowService;
 import com.plateforme.user.service.CreatorPortfolioService;
-import com.plateforme.user.service.CreatorReviewService;
+import com.plateforme.user.service.CreatorStarService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,7 +44,7 @@ class MarketplaceCreatorSearchRelevanceTest {
     @Mock MarketplaceProductRepository productRepository;
     @Mock CreatorPortfolioService creatorPortfolioService;
     @Mock ObjectMapper objectMapper;
-    @Mock CreatorReviewService creatorReviewService;
+    @Mock CreatorStarService creatorStarService;
     @Mock CreatorFollowService creatorFollowService;
     @Mock CreatorFollowRepository creatorFollowRepository;
     @Mock PublicMediaUrlResolver publicMediaUrlResolver;
@@ -62,7 +62,7 @@ class MarketplaceCreatorSearchRelevanceTest {
                 productRepository,
                 creatorPortfolioService,
                 objectMapper,
-                creatorReviewService,
+                creatorStarService,
                 creatorFollowService,
                 creatorFollowRepository,
                 publicMediaUrlResolver,

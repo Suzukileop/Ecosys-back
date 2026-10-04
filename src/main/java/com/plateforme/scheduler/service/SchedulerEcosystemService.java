@@ -53,20 +53,20 @@ public class SchedulerEcosystemService {
     @Transactional
     public ScheduledConfigDto updateScheduledConfig(UUID clientId, UUID requestId, ScheduledConfigDto dto) {
         if (!Objects.equals(dto.nicheRequestId(), requestId)) {
-            throw new BusinessException("REQUEST_ID_MISMATCH", "Identifiant niche incohérent");
+            throw new BusinessException("REQUEST_ID_MISMATCH", "The niche identifier does not match.");
         }
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.ACTIVE) {
             throw new BusinessException("NICHE_NOT_ACTIVE",
-                    "Le planning n'est modifiable que pour une niche active");
+                    "The schedule can only be edited for an active niche.");
         }
 
         ScheduledConfig cfg = scheduledConfigRepository.findByNicheRequest_IdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("SCHEDULE_CONFIG_NOT_FOUND",
-                        "Configuration planificateur introuvable"));
+                        "Schedule configuration not found."));
 
         validatePublicationSlots(nr, dto.publicationSlots());
 
@@ -80,11 +80,11 @@ public class SchedulerEcosystemService {
     public ScheduledConfigDto getMyScheduledConfig(UUID clientId, UUID requestId) {
         nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         ScheduledConfig cfg = scheduledConfigRepository.findByNicheRequest_IdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("SCHEDULE_CONFIG_NOT_FOUND",
-                        "Configuration introuvable"));
+                        "Schedule configuration not found."));
 
         return toConfigDto(cfg);
     }
@@ -93,32 +93,32 @@ public class SchedulerEcosystemService {
     public ScheduledPostResponse scheduleManualPost(UUID clientId, ScheduledPostRequest req) {
         User client = userRepository.findByIdAndDeletedAtIsNull(clientId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + clientId));
+                        "User not found."));
 
         NicheRequest nr = nicheRequestRepository.findByIdAndClient_Id(req.nicheRequestId(), clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         if (nr.getStatus() != NicheStatus.ACTIVE) {
-            throw new BusinessException("NICHE_NOT_ACTIVE", "La niche doit être active pour planifier");
+            throw new BusinessException("NICHE_NOT_ACTIVE", "The niche must be active to schedule posts.");
         }
 
         ScheduledConfig cfg = scheduledConfigRepository.findByNicheRequest_IdAndClient_Id(req.nicheRequestId(), clientId)
                 .orElseThrow(() -> new BusinessException("SCHEDULE_CONFIG_NOT_FOUND",
-                        "Configuration introuvable"));
+                        "Schedule configuration not found."));
 
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime minSchedule = now.plusMinutes(2);
         if (!req.scheduledAt().isAfter(minSchedule)) {
             throw new BusinessException("SCHEDULE_TOO_SOON",
-                    "La date de publication doit être au moins 2 minutes dans le futur");
+                    "The publish time must be at least 2 minutes in the future.");
         }
 
         ContentType contentType = req.contentType();
         if (contentType == ContentType.EXTERNAL_URL) {
             if (req.contentUrl() == null || req.contentUrl().isBlank()) {
                 throw new BusinessException("CONTENT_URL_REQUIRED",
-                        "L'URL du contenu est obligatoire pour une source externe");
+                        "A content URL is required for an external source.");
             }
             validateHttpUrl(req.contentUrl());
         }
@@ -150,7 +150,7 @@ public class SchedulerEcosystemService {
         try {
             postStatus = PostStatus.valueOf(status.trim().toUpperCase());
         } catch (IllegalArgumentException e) {
-            throw new BusinessException("INVALID_POST_STATUS", "Statut de publication invalide : " + status);
+            throw new BusinessException("INVALID_POST_STATUS", "Invalid post status.");
         }
         return scheduledPostRepository.findByClient_IdAndStatus(clientId, postStatus, pageable).map(this::toResponse);
     }
@@ -159,7 +159,7 @@ public class SchedulerEcosystemService {
     public Page<ScheduledPostResponse> getPostsByNicheRequest(UUID clientId, UUID requestId, Pageable pageable) {
         nicheRequestRepository.findByIdAndClient_Id(requestId, clientId)
                 .orElseThrow(() -> new BusinessException("NICHE_REQUEST_NOT_FOUND",
-                        "Demande introuvable"));
+                        "Request not found."));
 
         return scheduledPostRepository
                 .findByNicheRequest_IdAndClient_Id(requestId, clientId, pageable)
@@ -170,14 +170,14 @@ public class SchedulerEcosystemService {
     public void cancelPost(UUID clientId, UUID postId) {
         ScheduledPost post = scheduledPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("SCHEDULED_POST_NOT_FOUND",
-                        "Publication planifiée introuvable : " + postId));
+                        "Scheduled post not found."));
 
         UUID ownerId = post.getClient() != null ? post.getClient().getId() : null;
         if (!Objects.equals(ownerId, clientId)) {
             throw new AccessDeniedException("Cette publication n'appartient pas à l'utilisateur courant");
         }
         if (post.getStatus() != PostStatus.SCHEDULED) {
-            throw new BusinessException("POST_ALREADY_PROCESSED", "Post déjà traité");
+            throw new BusinessException("POST_ALREADY_PROCESSED", "This post has already been processed.");
         }
 
         post.setStatus(PostStatus.CANCELLED);
@@ -212,7 +212,7 @@ public class SchedulerEcosystemService {
     public void processPost(UUID postId) {
         ScheduledPost post = scheduledPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("SCHEDULED_POST_NOT_FOUND",
-                        "Publication planifiée introuvable : " + postId));
+                        "Scheduled post not found."));
 
         log.info("Traitement publication postId={} vers {}", postId, post.getPlatform());
 
@@ -255,7 +255,7 @@ public class SchedulerEcosystemService {
     public void handlePostFailure(UUID postId, String errorMsg) {
         ScheduledPost post = scheduledPostRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException("SCHEDULED_POST_NOT_FOUND",
-                        "Publication planifiée introuvable : " + postId));
+                        "Scheduled post not found."));
 
         post.setStatus(PostStatus.FAILED);
         post.setErrorMessage(errorMsg);
@@ -295,13 +295,12 @@ public class SchedulerEcosystemService {
         int expected = nr.getNbPostsPerWeek() != null ? nr.getNbPostsPerWeek().intValue() : 0;
         if (expected <= 0) {
             throw new BusinessException("NICHE_POSTS_INVALID",
-                    "Nombre de publications par semaine invalide sur la demande");
+                    "Invalid number of posts per week for this request.");
         }
         if (slots == null || slots.size() != expected) {
             throw new BusinessException(
                     "SLOT_COUNT_MISMATCH",
-                    "Définissez exactement " + expected
-                            + " créneau(x) (jour + heure), soit autant que vos publications par semaine.");
+                    "Set exactly " + expected + " time slot(s) (day and time), one for each weekly post.");
         }
         Set<String> seen = new HashSet<>();
         for (PublicationSlotDto s : slots) {
@@ -309,7 +308,7 @@ public class SchedulerEcosystemService {
             if (!seen.add(key)) {
                 throw new BusinessException(
                         "DUPLICATE_PUBLICATION_SLOT",
-                        "Créneau en double : jour " + s.dayOfWeek() + " à " + s.time());
+                        "Duplicate time slot: day " + s.dayOfWeek() + " at " + s.time() + ".");
             }
         }
     }
@@ -336,10 +335,10 @@ public class SchedulerEcosystemService {
             URI uri = URI.create(url.trim());
             String scheme = uri.getScheme();
             if (scheme == null || !(scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
-                throw new BusinessException("INVALID_CONTENT_URL", "L'URL du contenu doit être http ou https");
+                throw new BusinessException("INVALID_CONTENT_URL", "The content URL must start with http or https.");
             }
         } catch (IllegalArgumentException e) {
-            throw new BusinessException("INVALID_CONTENT_URL", "URL du contenu invalide");
+            throw new BusinessException("INVALID_CONTENT_URL", "Invalid content URL.");
         }
     }
 }

@@ -34,7 +34,7 @@ public class CreditService {
     @Transactional
     public void deduct(UUID userId, int amount, String reason, UUID refId) {
         if (amount <= 0) {
-            throw new BusinessException("INVALID_CREDIT_AMOUNT", "Le montant doit être positif");
+            throw new BusinessException("INVALID_CREDIT_AMOUNT", "The amount must be positive.");
         }
         UserCredit account = getOrCreateAccount(userId);
         if (account.getBalance() < amount) {
@@ -49,7 +49,7 @@ public class CreditService {
     @Transactional
     public void refund(UUID userId, int amount, String reason, UUID refId) {
         if (amount <= 0) {
-            throw new BusinessException("INVALID_CREDIT_AMOUNT", "Le montant doit être positif");
+            throw new BusinessException("INVALID_CREDIT_AMOUNT", "The amount must be positive.");
         }
         UserCredit account = getOrCreateAccount(userId);
         account.setBalance(account.getBalance() + amount);
@@ -61,7 +61,7 @@ public class CreditService {
     @Transactional
     public void addCredits(UUID userId, int amount, String reason, UUID refId) {
         if (amount <= 0) {
-            throw new BusinessException("INVALID_CREDIT_AMOUNT", "Le montant doit être positif");
+            throw new BusinessException("INVALID_CREDIT_AMOUNT", "The amount must be positive.");
         }
         UserCredit account = getOrCreateAccount(userId);
         account.setBalance(account.getBalance() + amount);
@@ -75,7 +75,7 @@ public class CreditService {
     @Transactional
     public void setBalance(UUID userId, int balance, String reason) {
         if (balance < 0) {
-            throw new BusinessException("INVALID_CREDIT_AMOUNT", "Le solde ne peut pas être négatif");
+            throw new BusinessException("INVALID_CREDIT_AMOUNT", "The balance cannot be negative.");
         }
         UserCredit account = getOrCreateAccount(userId);
         int previous = account.getBalance();
@@ -94,7 +94,7 @@ public class CreditService {
                 .orElseGet(() -> {
                     User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                             .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                                    "Utilisateur introuvable : " + userId));
+                                    "User not found."));
                     UserCredit uc = new UserCredit();
                     uc.setUser(user);
                     uc.setBalance(0);

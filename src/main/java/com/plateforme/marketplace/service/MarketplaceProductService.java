@@ -5,6 +5,7 @@ import com.plateforme.marketplace.dto.MarketplaceProductResponse;
 import com.plateforme.marketplace.entity.ContentTargetType;
 import com.plateforme.marketplace.entity.MarketplaceProduct;
 import com.plateforme.marketplace.entity.ProductType;
+import com.plateforme.marketplace.repository.MarketplaceProductGroupItemRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.CreatorProfile;
@@ -40,10 +41,12 @@ import java.util.UUID;
 public class MarketplaceProductService {
 
     private final MarketplaceProductRepository productRepository;
+    private final MarketplaceProductGroupItemRepository productGroupItemRepository;
     private final UserRepository userRepository;
     private final CreatorProfileRepository creatorProfileRepository;
     private final CreatorProfileReadinessService creatorProfileReadinessService;
     private final FollowerPublishNotifyService followerPublishNotifyService;
+    private final ProductBestsellerService bestsellerService;
 
     @Transactional
     public MarketplaceProductResponse createProduct(UUID creatorId, MarketplaceProductRequest req) {
@@ -84,15 +87,14 @@ public class MarketplaceProductService {
     public Page<MarketplaceProductResponse> getMyProducts(UUID creatorId, Pageable pageable) {
         Pageable unsorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         Page<MarketplaceProduct> page = productRepository.findByCreatorIdPinnedFirst(creatorId, unsorted);
-        Map<UUID, String> shopNames = loadShopNames(page.getContent());
-        return page.map(product -> toResponse(product, shopNames.get(product.getCreator().getId())));
+        return mapPage(page);
     }
 
     @Transactional(readOnly = true)
     public MarketplaceProductResponse getPublishedProduct(UUID productId) {
         MarketplaceProduct product = productRepository.findByIdAndIsPublishedTrue(productId)
                 .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND",
-                        "Published product not found: " + productId));
+                        "Product not found."));
         return toResponse(product);
     }
 
@@ -106,9 +108,11 @@ public class MarketplaceProductService {
             Integer maxPriceCents,
             UUID favoritesUserId,
             String format,
+            boolean profileOnly,
             Pageable pageable) {
         String g = genre != null && !genre.isBlank() ? genre.trim() : null;
-        String q = keyword != null && !keyword.isBlank() ? keyword.trim() : null;
+        String stripped = keyword != null ? keyword.trim().replaceFirst("^#+", "").trim() : null;
+        String q = stripped != null && !stripped.isEmpty() ? stripped : null;
         boolean freeOnly = minPriceCents != null && maxPriceCents != null
                 && minPriceCents == 0 && maxPriceCents == 0;
         boolean physicalOnly = "physical".equalsIgnoreCase(format);
@@ -125,9 +129,84 @@ public class MarketplaceProductService {
                         ContentTargetType.PRODUCT,
                         physicalOnly,
                         virtualOnly,
+                        profileOnly,
                         pageable);
-        Map<UUID, String> shopNames = loadShopNames(page.getContent());
-        return page.map(product -> toResponse(product, shopNames.get(product.getCreator().getId())));
+        return mapPage(page);
+    }
+
+    /**
+     * Search shortcuts ranked by engagement of the published products that carry them (tags, genre,
+     * specialty, short titles) — the catalog has no search log, so demand is inferred from views,
+     * likes and sales.
+     */
+    @Transactional(readOnly = true)
+    public List<String> getPopularSearchTerms(String format, int limit) {
+        boolean physicalOnly = "physical".equalsIgnoreCase(format);
+        boolean virtualOnly = "virtual".equalsIgnoreCase(format);
+        Page<MarketplaceProduct> page = productRepository.findPublishedFiltered(
+                null, physicalOnly ? ProductType.PHYSICAL : null, null, null, false, null, null,
+                null, ContentTargetType.PRODUCT, physicalOnly, virtualOnly, false,
+                PageRequest.of(0, POPULAR_TERMS_SAMPLE_SIZE, Sort.by(Sort.Direction.DESC, "views")));
+
+        Map<String, Long> scores = new HashMap<>();
+        Map<String, String> labels = new HashMap<>();
+        for (MarketplaceProduct product : page.getContent()) {
+            long weight = 1L
+                    + nonNull(product.getViews())
+                    + 3L * nonNull(product.getLikes())
+                    + 5L * nonNull(product.getSalesCount());
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            List<String> candidates = new ArrayList<>();
+            if (product.getTags() != null) candidates.addAll(product.getTags());
+            candidates.add(product.getGenre());
+            candidates.add(product.getSpecialite());
+            candidates.add(searchableTitle(product.getTitle()));
+            for (String raw : candidates) {
+                String label = normalizeSearchTerm(raw);
+                if (label == null) continue;
+                String key = label.toLowerCase(java.util.Locale.ROOT);
+                if (!seen.add(key)) continue;
+                scores.merge(key, weight, Long::sum);
+                labels.putIfAbsent(key, label);
+            }
+        }
+        return scores.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed()
+                        .thenComparing(Map.Entry.comparingByKey()))
+                .limit(Math.max(1, limit))
+                .map(entry -> labels.get(entry.getKey()))
+                .toList();
+    }
+
+    private static final int POPULAR_TERMS_SAMPLE_SIZE = 300;
+    /** A physical product listed without a quantity is a single unit. */
+    private static final int DEFAULT_PHYSICAL_STOCK = 1;
+
+    private static long nonNull(Integer value) {
+        return value != null ? value : 0L;
+    }
+
+    /** Keeps short, brand-like titles ("Ferrari", "Cargo pants") and drops trailing versions ("pants 4.0"). */
+    private static String searchableTitle(String title) {
+        if (title == null) return null;
+        List<String> words = new ArrayList<>(List.of(title.trim().split("\\s+")));
+        while (!words.isEmpty() && words.get(words.size() - 1).matches(".*\\d.*")) {
+            words.remove(words.size() - 1);
+        }
+        return words.isEmpty() || words.size() > 3 ? null : String.join(" ", words);
+    }
+
+    private static String normalizeSearchTerm(String raw) {
+        if (raw == null) return null;
+        String collapsed = raw.trim().replaceAll("\\s+", " ");
+        if (collapsed.length() < 2 || collapsed.length() > 30) return null;
+        StringBuilder out = new StringBuilder(collapsed.length());
+        for (String word : collapsed.split(" ")) {
+            if (!out.isEmpty()) out.append(' ');
+            out.append(word.substring(0, 1).toUpperCase(java.util.Locale.ROOT))
+                    .append(word.substring(1).toLowerCase(java.util.Locale.ROOT));
+        }
+        return out.toString();
     }
 
     @Transactional(readOnly = true)
@@ -159,8 +238,9 @@ public class MarketplaceProductService {
 
         List<MarketplaceProduct> products = ranked.values().stream().limit(limit).toList();
         Map<UUID, String> shopNames = loadShopNames(products);
+        ProductBestsellerService.Rankings rankings = rankingsFor(products);
         return products.stream()
-                .map(product -> toResponse(product, shopNames.get(product.getCreator().getId())))
+                .map(product -> toResponse(product, shopNames.get(product.getCreator().getId()), rankings))
                 .toList();
     }
 
@@ -190,6 +270,7 @@ public class MarketplaceProductService {
                 ContentTargetType.PRODUCT,
                 false,
                 false,
+                false,
                 pageable);
         for (MarketplaceProduct candidate : page.getContent()) {
             if (candidate.getId().equals(excludeProductId)) {
@@ -208,6 +289,7 @@ public class MarketplaceProductService {
         product.setDeletedAt(LocalDateTime.now());
         product.setIsPublished(false);
         productRepository.save(product);
+        productGroupItemRepository.deleteByProduct_Id(productId);
         log.info("Marketplace product soft-deleted id={} creator={}", productId, creatorId);
     }
 
@@ -229,6 +311,53 @@ public class MarketplaceProductService {
     }
 
     @Transactional
+    public MarketplaceProductResponse recordSale(UUID creatorId, UUID productId, int quantity) {
+        MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        if (quantity < 1) {
+            throw new BusinessException("INVALID_QUANTITY", "Quantity must be at least 1.");
+        }
+        consumeStock(product, quantity);
+        int sales = product.getSalesCount() != null ? product.getSalesCount() : 0;
+        product.setSalesCount(sales + quantity);
+        product = productRepository.save(product);
+        log.info("Marketplace product id={} sale recorded qty={} by creator={}", productId, quantity, creatorId);
+        return toResponse(product);
+    }
+
+    @Transactional
+    public MarketplaceProductResponse undoSale(UUID creatorId, UUID productId, int quantity) {
+        MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
+        int sales = product.getSalesCount() != null ? product.getSalesCount() : 0;
+        if (quantity < 1 || quantity > sales) {
+            throw new BusinessException("INVALID_QUANTITY", "There are not that many sales to undo.");
+        }
+        product.setSalesCount(sales - quantity);
+        if (product.getType() == ProductType.PHYSICAL) {
+            int stock = product.getStockQuantity() != null ? product.getStockQuantity() : DEFAULT_PHYSICAL_STOCK;
+            product.setStockQuantity(Math.max(stock, 0) + quantity);
+        }
+        product = productRepository.save(product);
+        log.info("Marketplace product id={} sale undone qty={} by creator={}", productId, quantity, creatorId);
+        return toResponse(product);
+    }
+
+    /** Removes {@code quantity} units from a physical product's stock, rejecting oversells. */
+    public void consumeStock(MarketplaceProduct product, int quantity) {
+        if (product.getType() != ProductType.PHYSICAL) {
+            return;
+        }
+        int stock = product.getStockQuantity() != null ? product.getStockQuantity() : DEFAULT_PHYSICAL_STOCK;
+        if (stock <= 0) {
+            throw new BusinessException("OUT_OF_STOCK", "This product is out of stock.");
+        }
+        if (quantity > stock) {
+            throw new BusinessException("INSUFFICIENT_STOCK",
+                    stock == 1 ? "Only 1 unit is left in stock." : "Only " + stock + " units are left in stock.");
+        }
+        product.setStockQuantity(stock - quantity);
+    }
+
+    @Transactional
     public MarketplaceProductResponse setPinned(UUID creatorId, UUID productId, boolean pinned) {
         MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
         product.setPinnedAt(pinned ? LocalDateTime.now() : null);
@@ -238,24 +367,24 @@ public class MarketplaceProductService {
     }
 
     @Transactional
-    public MarketplaceProductResponse setBestseller(UUID creatorId, UUID productId, boolean bestseller) {
+    public MarketplaceProductResponse setShowOnProfile(UUID creatorId, UUID productId, boolean showOnProfile) {
         MarketplaceProduct product = requireOwnedProduct(creatorId, productId);
-        product.setIsBestseller(bestseller);
+        product.setShowOnProfile(showOnProfile);
         product = productRepository.save(product);
-        log.info("Marketplace product id={} bestseller={} by creator={}", productId, bestseller, creatorId);
+        log.info("Marketplace product id={} showOnProfile={} by creator={}", productId, showOnProfile, creatorId);
         return toResponse(product);
     }
 
     MarketplaceProduct requirePublishedProduct(UUID productId) {
         return productRepository.findByIdAndIsPublishedTrue(productId)
                 .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND",
-                        "Published product not found: " + productId));
+                        "Product not found."));
     }
 
     MarketplaceProduct requireOwnedProduct(UUID creatorId, UUID productId) {
         MarketplaceProduct product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND",
-                        "Product not found: " + productId));
+                        "Product not found."));
         UUID ownerId = product.getCreator() != null ? product.getCreator().getId() : null;
         if (!Objects.equals(ownerId, creatorId)) {
             throw new AccessDeniedException("This product does not belong to the current user");
@@ -266,7 +395,7 @@ public class MarketplaceProductService {
     private User requireCreator(UUID creatorId) {
         return userRepository.findByIdAndDeletedAtIsNull(creatorId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "User not found: " + creatorId));
+                        "User not found."));
     }
 
     private void applyRequest(MarketplaceProduct product, MarketplaceProductRequest req) {
@@ -290,7 +419,7 @@ public class MarketplaceProductService {
         }
 
         List<String> tools = req.compatibleTools() != null ? req.compatibleTools() : List.of();
-        List<String> tags = req.tags() != null ? req.tags() : List.of();
+        List<String> tags = normalizeHashtags(req.tags());
         List<String> galleryUrls = req.galleryImageUrls() != null
                 ? req.galleryImageUrls().stream()
                     .filter(url -> url != null && !url.isBlank())
@@ -332,8 +461,31 @@ public class MarketplaceProductService {
         product.setCompareAtPriceCents(req.compareAtPriceCents());
         product.setVideoDurationSeconds(req.videoDurationSeconds());
         product.setVideoResolution(req.videoResolution());
-        product.setIsBestseller(Boolean.TRUE.equals(req.isBestseller()));
         product.setIsPublished(Boolean.TRUE.equals(req.isPublished()));
+        product.setStockQuantity(req.type() == ProductType.PHYSICAL
+                ? (req.stockQuantity() != null ? req.stockQuantity() : DEFAULT_PHYSICAL_STOCK)
+                : null);
+    }
+
+    static final int MAX_HASHTAGS = 15;
+    static final int MAX_HASHTAG_LENGTH = 40;
+
+    /**
+     * Stored without the leading {@code #}; letters (any script), digits, {@code _} and {@code -} only,
+     * de-duplicated case-insensitively in first-seen order.
+     */
+    static List<String> normalizeHashtags(List<String> raw) {
+        if (raw == null || raw.isEmpty()) return List.of();
+        java.util.LinkedHashMap<String, String> unique = new java.util.LinkedHashMap<>();
+        for (String value : raw) {
+            if (value == null) continue;
+            String cleaned = value.trim().replaceAll("^#+", "").replaceAll("[^\\p{L}\\p{N}_-]", "");
+            if (cleaned.isEmpty()) continue;
+            if (cleaned.length() > MAX_HASHTAG_LENGTH) cleaned = cleaned.substring(0, MAX_HASHTAG_LENGTH);
+            unique.putIfAbsent(cleaned.toLowerCase(java.util.Locale.ROOT), cleaned);
+            if (unique.size() >= MAX_HASHTAGS) break;
+        }
+        return List.copyOf(unique.values());
     }
 
     MarketplaceProductResponse toResponse(MarketplaceProduct product) {
@@ -341,10 +493,29 @@ public class MarketplaceProductService {
         if (product.getCreator() != null && product.getCreator().getId() != null) {
             shopName = loadShopNames(List.of(product)).get(product.getCreator().getId());
         }
-        return toResponse(product, shopName);
+        return toResponse(product, shopName, rankingsFor(List.of(product)));
     }
 
-    MarketplaceProductResponse toResponse(MarketplaceProduct product, String shopName) {
+    private Page<MarketplaceProductResponse> mapPage(Page<MarketplaceProduct> page) {
+        Map<UUID, String> shopNames = loadShopNames(page.getContent());
+        ProductBestsellerService.Rankings rankings = rankingsFor(page.getContent());
+        return page.map(product -> toResponse(product, shopNames.get(product.getCreator().getId()), rankings));
+    }
+
+    private ProductBestsellerService.Rankings rankingsFor(List<MarketplaceProduct> products) {
+        List<UUID> creatorIds = products.stream()
+                .map(MarketplaceProduct::getCreator)
+                .filter(Objects::nonNull)
+                .map(User::getId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return bestsellerService.rank(creatorIds);
+    }
+
+    MarketplaceProductResponse toResponse(
+            MarketplaceProduct product, String shopName, ProductBestsellerService.Rankings rankings) {
+        Integer bestsellerRank = rankings.shopRank(product.getId());
         User creator = product.getCreator();
         List<String> tools = product.getCompatibleTools() != null ? product.getCompatibleTools() : List.of();
         List<String> tags = product.getTags() != null ? product.getTags() : List.of();
@@ -386,7 +557,7 @@ public class MarketplaceProductService {
                 tags,
                 product.getVideoDurationSeconds(),
                 product.getVideoResolution(),
-                Boolean.TRUE.equals(product.getIsBestseller()),
+                bestsellerRank != null,
                 product.getPinnedAt() != null,
                 product.getViews() != null ? product.getViews() : 0,
                 product.getLikes() != null ? product.getLikes() : 0,
@@ -396,7 +567,13 @@ public class MarketplaceProductService {
                 Boolean.TRUE.equals(product.getIsPublished()),
                 product.getCreatedAt(),
                 product.getUpdatedAt(),
-                galleryUrls
+                galleryUrls,
+                product.getType() == ProductType.PHYSICAL
+                        ? (product.getStockQuantity() != null ? product.getStockQuantity() : DEFAULT_PHYSICAL_STOCK)
+                        : null,
+                !Boolean.FALSE.equals(product.getShowOnProfile()),
+                bestsellerRank,
+                rankings.catalogues(product.getId())
         );
     }
 

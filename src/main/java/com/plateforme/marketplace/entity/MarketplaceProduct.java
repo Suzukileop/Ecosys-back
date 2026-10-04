@@ -142,14 +142,19 @@ public class MarketplaceProduct {
     @Column(name = "compare_at_price_cents")
     private Integer compareAtPriceCents;
 
+    /** Units on hand; only meaningful for {@link ProductType#PHYSICAL}, null otherwise. */
+    @Column(name = "stock_quantity")
+    private Integer stockQuantity;
+
     @Column(name = "video_duration_seconds")
     private Integer videoDurationSeconds;
 
     @Column(name = "video_resolution", length = 10)
     private String videoResolution;
 
-    @Column(name = "is_bestseller", nullable = false)
-    private Boolean isBestseller = false;
+    /** When false, the product stays in the marketplace and shop but is hidden from the public profile. */
+    @Column(name = "show_on_profile", nullable = false)
+    private Boolean showOnProfile = true;
 
     /** When set, product is pinned to the top of the creator's listings. */
     @Column(name = "pinned_at")

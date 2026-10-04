@@ -235,7 +235,7 @@ public class OAuthService {
     private User createOAuthUser(OAuthProfilePayload profile) {
         String roleName = "ROLE_CREATOR";
         Role roleEntity = roleRepository.findByName(roleName)
-                .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role not found: " + roleName));
+                .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role not found."));
 
         User user = new User();
         user.setEmail(profile.email());
@@ -253,7 +253,7 @@ public class OAuthService {
         user.setRoles(Set.of(roleEntity));
 
         user = userRepository.save(user);
-        log.info("OAuth user created: {} via {}", user.getEmail(), profile.provider());
+        log.info("OAuth user created: {} via {}", user.getId(), profile.provider());
 
         CreatorProfile creatorProfile = new CreatorProfile();
         creatorProfile.setUser(user);

@@ -10,10 +10,10 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 public record ScheduledPostRequest(
-        @NotNull(message = "Le demande niche est obligatoire")
+        @NotNull(message = "A niche request is required.")
         UUID nicheRequestId,
 
-        @NotNull(message = "La plateforme est obligatoire")
+        @NotNull(message = "A platform is required.")
         Platform platform,
 
         String contentUrl,
@@ -23,8 +23,8 @@ public record ScheduledPostRequest(
         @Size(max = 2200)
         String caption,
 
-        @NotNull(message = "La date de publication est obligatoire")
-        @Future(message = "La date doit être dans le futur")
+        @NotNull(message = "A publish date is required.")
+        @Future(message = "The publish date must be in the future.")
         LocalDateTime scheduledAt,
 
         @Size(max = 20)

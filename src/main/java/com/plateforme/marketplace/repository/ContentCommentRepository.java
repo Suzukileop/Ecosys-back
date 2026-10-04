@@ -44,4 +44,22 @@ public interface ContentCommentRepository extends JpaRepository<ContentComment, 
 
     long countByTargetTypeAndTargetIdAndDeletedAtIsNullAndHiddenAtIsNull(
             ContentTargetType targetType, UUID targetId);
+
+    /**
+     * Visible comment count for several targets at once. A feed page used to cost one count query
+     * per card — and one HTTP round trip per card, because the browser asked for them one by one.
+     * Targets with no comment are simply absent from the result.
+     */
+    @Query("""
+            SELECT c.targetId, COUNT(c)
+            FROM ContentComment c
+            WHERE c.targetType = :targetType
+              AND c.targetId IN :targetIds
+              AND c.deletedAt IS NULL
+              AND c.hiddenAt IS NULL
+            GROUP BY c.targetId
+            """)
+    List<Object[]> countVisibleByTargetIds(
+            @Param("targetType") ContentTargetType targetType,
+            @Param("targetIds") Collection<UUID> targetIds);
 }

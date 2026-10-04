@@ -33,7 +33,7 @@ import com.plateforme.user.service.CreatorPortfolioService;
 import com.plateforme.user.service.CreatorSearchExpand;
 import com.plateforme.user.service.PortfolioSettingsSupport;
 import com.plateforme.user.service.CreatorResponseTimeService;
-import com.plateforme.user.service.CreatorReviewService;
+import com.plateforme.user.service.CreatorStarService;
 import com.plateforme.user.service.ProfileExtensionsSupport;
 import com.plateforme.user.service.ProfileBioSupport;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
@@ -95,7 +95,7 @@ public class MarketplaceService {
     private final MarketplaceProductRepository productRepository;
     private final CreatorPortfolioService creatorPortfolioService;
     private final ObjectMapper objectMapper;
-    private final CreatorReviewService creatorReviewService;
+    private final CreatorStarService creatorStarService;
     private final CreatorFollowService creatorFollowService;
     private final CreatorFollowRepository creatorFollowRepository;
     private final PublicMediaUrlResolver publicMediaUrlResolver;
@@ -240,7 +240,7 @@ public class MarketplaceService {
     @Transactional(readOnly = true)
     public UUID resolveCreatorUserId(String idOrUsername) {
         if (idOrUsername == null || idOrUsername.isBlank()) {
-            throw new BusinessException("CREATOR_NOT_FOUND", "Créateur introuvable");
+            throw new BusinessException("CREATOR_NOT_FOUND", "Creator not found.");
         }
         String raw = idOrUsername.trim();
         try {
@@ -251,19 +251,19 @@ public class MarketplaceService {
         return userRepository.findByUsernameAndDeletedAtIsNull(raw)
                 .map(User::getId)
                 .orElseThrow(() -> new BusinessException("CREATOR_NOT_FOUND",
-                        "Créateur introuvable : " + raw));
+                        "Creator not found."));
     }
 
     @Transactional(readOnly = true)
     public CreatorProfileResponse getCreatorPublicProfile(UUID userId, UUID viewerUserId) {
         CreatorProfile profile = creatorProfileRepository.findByUserIdAndUserDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException("CREATOR_NOT_FOUND",
-                        "Créateur introuvable : " + userId));
+                        "Creator not found."));
 
         User user = profile.getUser();
         long curatedCount = creatorPortfolioService.countPublicCuratedPosts(userId);
         long contentCount = contentPostRepository.countByCreator_Id(userId);
-        long productCount = productRepository.countByCreator_IdAndIsPublishedTrue(userId);
+        long productCount = productRepository.countByCreator_IdAndIsPublishedTrueAndShowOnProfileTrue(userId);
 
         List<ProfilePortfolioWorkDto> portfolioWorks = safePortfolioWorks(profile.getPortfolioWorks());
         long portfolioCount = !portfolioWorks.isEmpty() ? portfolioWorks.size() : curatedCount;
@@ -274,7 +274,8 @@ public class MarketplaceService {
         boolean authenticated = viewerUserId != null;
         ResolvedPublicContact contact = resolvePublicContact(profile, user, authenticated);
 
-        Double averageRating = creatorReviewService.getReputation(userId, 0).averageRating();
+        long starCount = creatorStarService.getStarCount(userId);
+        boolean isStarred = creatorStarService.isStarred(viewerUserId, userId);
         long followerCount = creatorFollowService.getFollowerCount(userId);
         boolean isFollowing = creatorFollowService.isFollowing(viewerUserId, userId);
 
@@ -285,7 +286,8 @@ public class MarketplaceService {
                 portfolioCount,
                 contentCount,
                 productCount,
-                averageRating,
+                starCount,
+                isStarred,
                 followerCount,
                 isFollowing,
                 portfolioPosts,
@@ -317,7 +319,7 @@ public class MarketplaceService {
         long productCount = productRepository.countByCreator_IdAndIsPublishedTrue(userId);
 
         ResolvedPublicContact contact = resolvePublicContact(profile, user, authenticated);
-        Double averageRating = creatorReviewService.getReputation(userId, 0).averageRating();
+        long starCount = creatorStarService.getStarCount(userId);
 
         return buildResponse(
                 profile,
@@ -326,7 +328,8 @@ public class MarketplaceService {
                 portfolioCount,
                 contentCount,
                 productCount,
-                averageRating,
+                starCount,
+                false,
                 followerCount,
                 isFollowing,
                 List.of(),
@@ -341,7 +344,8 @@ public class MarketplaceService {
             long portfolioCount,
             long contentCount,
             long productCount,
-            Double averageRating,
+            long starCount,
+            boolean isStarred,
             long followerCount,
             boolean isFollowing,
             List<ContentPostResponse> portfolioPosts,
@@ -375,7 +379,8 @@ public class MarketplaceService {
                 contentCount,
                 productCount,
                 serviceCount,
-                averageRating,
+                starCount,
+                isStarred,
                 profile.getStudioHeaderLayout() != null ? profile.getStudioHeaderLayout() : "BANNER",
                 profile.getStudioHeaderContentStyle() != null ? profile.getStudioHeaderContentStyle() : "DEFAULT",
                 profile.getStudioTabNavAlign() != null ? profile.getStudioTabNavAlign() : "LEFT",
@@ -588,6 +593,9 @@ public class MarketplaceService {
                     0,
                     portfolioCount,
                     null,
+                    null,
+                    /* Portfolio works are not commentable and carry no viewer reaction. */
+                    0L,
                     null
             ));
         }

@@ -7,6 +7,7 @@ import com.plateforme.messaging.service.MessagingParticipantGuard;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.presence.PresenceService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.messaging.Message;
@@ -25,6 +26,9 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -59,11 +63,37 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         this.presenceService = presenceService;
     }
 
+    @Value("${app.frontend-url:http://localhost:3000}")
+    private String frontendUrl;
+
+    @Value("${app.cors-extra-origins:}")
+    private String corsExtraOrigins;
+
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws")
-                .setAllowedOrigins("http://localhost:3000")
+                .setAllowedOriginPatterns(resolveAllowedOrigins())
                 .withSockJS();
+    }
+
+    /** REST CORS origins plus dev preview hosts, as patterns, so any client that can call the API can open the socket. */
+    private String[] resolveAllowedOrigins() {
+        Set<String> origins = new LinkedHashSet<>();
+        origins.add("http://localhost:3000");
+        // Dev previews: quick tunnels get a new hostname on every launch, LAN devices a new address.
+        origins.add("https://*.trycloudflare.com");
+        origins.add("http://192.168.*.*:3000");
+        if (StringUtils.hasText(frontendUrl)) {
+            origins.add(frontendUrl.trim().replaceAll("/+$", ""));
+        }
+        if (StringUtils.hasText(corsExtraOrigins)) {
+            Arrays.stream(corsExtraOrigins.split(","))
+                    .map(String::trim)
+                    .filter(origin -> !origin.isEmpty())
+                    .map(origin -> origin.replaceAll("/+$", ""))
+                    .forEach(origins::add);
+        }
+        return origins.toArray(String[]::new);
     }
 
     @Override

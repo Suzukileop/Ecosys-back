@@ -12,9 +12,9 @@
     </parent>
 
     <groupId>com.plateforme</groupId>
-    <artifactId>noprobleme-backend</artifactId>
+    <artifactId>skraft-backend</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>NoProbleme Backend</name>
+    <name>Skraft Backend</name>
     <description>Plateforme SaaS de création de contenu assistée par IA - Backend</description>
 
     <properties>

@@ -30,7 +30,7 @@ public class CreatorProfileReadinessService {
 
     private void requireReady(UUID userId, boolean requireSpecialties) {
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + userId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
         CreatorProfile profile = creatorProfileRepository.findByUserId(userId).orElse(null);
         CreatorProfileReadinessSupport.requireReady(user, profile, requireSpecialties);
     }

@@ -1,5 +1,6 @@
 package com.plateforme.user.service;
 
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.dto.CreatorFollowStatsDto;
@@ -31,6 +32,7 @@ public class CreatorFollowService {
     private final CreatorFollowRepository creatorFollowRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService;
+    private final PublicMediaUrlResolver publicMediaUrlResolver;
 
     @Transactional
     public void follow(UUID followerId, UUID creatorId) {
@@ -96,7 +98,7 @@ public class CreatorFollowService {
                 follow.getCreatedAt(),
                 follower.getId(),
                 followerFullName,
-                follower.getAvatarUrl());
+                publicMediaUrlResolver.resolveAvatarUrl(follower.getAvatarUrl()));
     }
 
     @Transactional(readOnly = true)

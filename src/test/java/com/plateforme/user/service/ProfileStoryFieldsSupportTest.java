@@ -203,7 +203,8 @@ class ProfileStoryFieldsSupportTest {
             List.of(new com.plateforme.user.dto.ExperienceProofLink(
                 linkId, "Repo", "https://github.com/example/project", "github", 0)),
             " Remote ",
-            "freelance"
+            "freelance",
+            true
         )),
         USER_ID
     );
@@ -220,6 +221,7 @@ class ProfileStoryFieldsSupportTest {
     assertEquals("GITHUB", block.links().get(0).platform());
     assertEquals("Remote", block.location());
     assertEquals("FREELANCE", block.employmentType());
+    assertEquals(Boolean.TRUE, block.hideFromCv());
   }
 
   @Test
@@ -239,7 +241,7 @@ class ProfileStoryFieldsSupportTest {
     assertThrows(BusinessException.class, () -> ProfileStoryFieldsSupport.normalizeBlocks(
         List.of(new ProfileMediaBlock(
             UUID.randomUUID(), 0, null, null, "Text", null, null, null,
-            "ACTIVE", List.of(), List.of(), List.of(), null, null)),
+            "ACTIVE", List.of(), List.of(), List.of(), null, null, null)),
         USER_ID
     ));
   }

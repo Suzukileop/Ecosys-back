@@ -3,9 +3,9 @@ package com.plateforme.auth.dto;
 import jakarta.validation.constraints.NotBlank;
 
 public record LoginRequest(
-        @NotBlank(message = "L'email est obligatoire")
+        @NotBlank(message = "Email is required.")
         String email,
 
-        @NotBlank(message = "Le mot de passe est obligatoire")
+        @NotBlank(message = "Password is required.")
         String password
 ) {}

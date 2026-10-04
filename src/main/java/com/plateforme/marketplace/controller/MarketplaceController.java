@@ -34,12 +34,10 @@ import org.springframework.web.bind.annotation.*;
 
 import com.plateforme.user.dto.CreatorFollowItemDto;
 import com.plateforme.user.dto.CreatorFollowStatsDto;
-import com.plateforme.user.dto.CreatorReputationDto;
-import com.plateforme.user.dto.CreatorReviewItemDto;
-import com.plateforme.user.dto.SubmitCreatorReviewDto;
+import com.plateforme.user.dto.CreatorStarStatsDto;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.service.CreatorFollowService;
-import com.plateforme.user.service.CreatorReviewService;
+import com.plateforme.user.service.CreatorStarService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
@@ -58,7 +56,7 @@ public class MarketplaceController {
     private final MarketplaceProductService productService;
     private final MarketplaceAccessService accessService;
     private final MarketplaceProductGroupService productGroupService;
-    private final CreatorReviewService creatorReviewService;
+    private final CreatorStarService creatorStarService;
     private final CreatorFollowService creatorFollowService;
     private final CreatorProfileViewService creatorProfileViewService;
     private final CreatorContactMessageService creatorContactMessageService;
@@ -197,10 +195,12 @@ public class MarketplaceController {
             @RequestParam(required = false) String genre,
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
         Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(PagedResponse.fromPage(
-                contentPostService.getPublicPosts(creatorId, genre, q, pageable)));
+        /* The route stays public; a signed-in viewer just also gets their own reaction per post. */
+        return ResponseEntity.ok(PagedResponse.fromPage(contentPostService.getPublicPosts(
+                creatorId, genre, q, pageable, resolveViewerUserId(authentication))));
     }
 
     @Operation(summary = "Détail d'un contenu public")
@@ -239,6 +239,7 @@ public class MarketplaceController {
             @RequestParam(required = false) String format,
             @RequestParam(defaultValue = "popular") String sort,
             @RequestParam(defaultValue = "false") boolean favoritesOnly,
+            @RequestParam(defaultValue = "false") boolean profileOnly,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
@@ -253,7 +254,8 @@ public class MarketplaceController {
         }
         return ResponseEntity.ok(PagedResponse.fromPage(
                 productService.getPublishedProducts(
-                        creatorId, type, genre, q, minPriceCents, maxPriceCents, favoritesUserId, format, pageable)));
+                        creatorId, type, genre, q, minPriceCents, maxPriceCents, favoritesUserId, format,
+                        profileOnly, pageable)));
     }
 
     private Sort resolveProductSort(String sort) {
@@ -267,6 +269,15 @@ public class MarketplaceController {
             case "views" -> Sort.by(Sort.Direction.DESC, "views");
             default -> Sort.by(Sort.Direction.DESC, "createdAt");
         };
+    }
+
+    @Operation(summary = "Popular search shortcuts for the product catalog")
+    @GetMapping("/products/popular-searches")
+    public ResponseEntity<List<String>> getPopularProductSearches(
+            @RequestParam(required = false) String format,
+            @RequestParam(defaultValue = "8") int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 20);
+        return ResponseEntity.ok(productService.getPopularSearchTerms(format, safeLimit));
     }
 
     @GetMapping("/products/{id}/similar")
@@ -358,23 +369,38 @@ public class MarketplaceController {
                 marketplaceService.getFollowingCreators(followerId, pageable)));
     }
 
-    @Operation(summary = "Creator reputation summary")
-    @GetMapping("/creators/{id}/reputation")
-    public ResponseEntity<CreatorReputationDto> getCreatorReputation(@PathVariable UUID id) {
-        return ResponseEntity.ok(creatorReviewService.getReputation(id, 10));
+    @Operation(summary = "Creator trust stars (count + whether the viewer starred)")
+    @GetMapping("/creators/{id}/stars")
+    public ResponseEntity<CreatorStarStatsDto> getCreatorStars(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        return ResponseEntity.ok(creatorStarService.getStats(id, resolveViewerUserId(authentication)));
     }
 
-    @Operation(summary = "Submit a creator review")
-    @PostMapping("/creators/{id}/reviews")
-    public ResponseEntity<CreatorReviewItemDto> submitCreatorReview(
+    @Operation(summary = "Give a trust star to a creator", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/creators/{id}/star")
+    public ResponseEntity<CreatorStarStatsDto> starCreator(
             @PathVariable UUID id,
-            @Valid @RequestBody SubmitCreatorReviewDto dto,
             Authentication authentication) {
         if (!isAuthenticatedUser(authentication)) {
             return ResponseEntity.status(401).build();
         }
-        UUID reviewerId = ((User) authentication.getPrincipal()).getId();
-        return ResponseEntity.ok(creatorReviewService.submitReview(id, reviewerId, dto));
+        UUID userId = ((User) authentication.getPrincipal()).getId();
+        creatorStarService.star(userId, id);
+        return ResponseEntity.ok(creatorStarService.getStats(id, userId));
+    }
+
+    @Operation(summary = "Remove a trust star from a creator", security = @SecurityRequirement(name = "bearerAuth"))
+    @DeleteMapping("/creators/{id}/star")
+    public ResponseEntity<CreatorStarStatsDto> unstarCreator(
+            @PathVariable UUID id,
+            Authentication authentication) {
+        if (!isAuthenticatedUser(authentication)) {
+            return ResponseEntity.status(401).build();
+        }
+        UUID userId = ((User) authentication.getPrincipal()).getId();
+        creatorStarService.unstar(userId, id);
+        return ResponseEntity.ok(creatorStarService.getStats(id, userId));
     }
 
     private boolean isAuthenticatedUser(Authentication authentication) {

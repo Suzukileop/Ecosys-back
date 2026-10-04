@@ -4,6 +4,7 @@ import com.plateforme.user.dto.LanguageProficiencyLevelDto;
 import com.plateforme.user.repository.LanguageProficiencyLevelRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +17,12 @@ import java.util.List;
 public class ReferenceController {
 
     private final LanguageProficiencyLevelRepository languageProficiencyLevelRepository;
+
+    @Operation(summary = "Reachability probe used by the frontend to tell a down server from a dropped request")
+    @GetMapping("/ping")
+    public ResponseEntity<Void> ping() {
+        return ResponseEntity.noContent().build();
+    }
 
     @Operation(summary = "List spoken-language proficiency levels (beginner → expert)")
     @GetMapping("/language-proficiency-levels")

@@ -30,7 +30,7 @@ public class ContentPost {
     @JoinColumn(name = "creator_id", nullable = false)
     private User creator;
 
-    @Column(length = 300)
+    @Column(length = 3000)
     private String title;
 
     @Column(length = 100)

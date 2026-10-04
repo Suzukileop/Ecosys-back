@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -23,7 +25,6 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
             WHERE p.creator.id = :creatorId
             ORDER BY CASE WHEN p.pinnedAt IS NULL THEN 1 ELSE 0 END ASC,
                      p.pinnedAt DESC NULLS LAST,
-                     CASE WHEN p.isBestseller = true THEN 0 ELSE 1 END ASC,
                      p.createdAt DESC
             """)
     Page<MarketplaceProduct> findByCreatorIdPinnedFirst(
@@ -32,7 +33,18 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
 
     long countByCreator_IdAndIsPublishedTrue(UUID creatorId);
 
+    long countByCreator_IdAndIsPublishedTrueAndShowOnProfileTrue(UUID creatorId);
+
     Optional<MarketplaceProduct> findByIdAndIsPublishedTrue(UUID id);
+
+    /** Rows of {@code [creatorId, productId, salesCount]} for published products with at least one sale. */
+    @Query("""
+            SELECT p.creator.id, p.id, p.salesCount FROM MarketplaceProduct p
+            WHERE p.creator.id IN :creatorIds
+            AND p.isPublished = true
+            AND p.salesCount > 0
+            """)
+    List<Object[]> findSellingProductsByCreatorIds(@Param("creatorIds") Collection<UUID> creatorIds);
 
     @Query("""
             SELECT p FROM MarketplaceProduct p
@@ -58,9 +70,9 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
             ))
             AND (:physicalOnly = false OR p.type = com.plateforme.marketplace.entity.ProductType.PHYSICAL)
             AND (:virtualOnly = false OR p.type <> com.plateforme.marketplace.entity.ProductType.PHYSICAL)
+            AND (:profileOnly = false OR p.showOnProfile = true)
             ORDER BY CASE WHEN p.pinnedAt IS NULL THEN 1 ELSE 0 END ASC,
                      p.pinnedAt DESC NULLS LAST,
-                     CASE WHEN p.isBestseller = true THEN 0 ELSE 1 END ASC,
                      p.createdAt DESC
             """)
     Page<MarketplaceProduct> findPublishedFiltered(
@@ -75,5 +87,6 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
             @Param("favoriteTargetType") ContentTargetType favoriteTargetType,
             @Param("physicalOnly") boolean physicalOnly,
             @Param("virtualOnly") boolean virtualOnly,
+            @Param("profileOnly") boolean profileOnly,
             Pageable pageable);
 }

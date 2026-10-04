@@ -15,7 +15,7 @@ public class SwaggerConfig {
     public OpenAPI openAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("NoProblème API")
+                        .title("Skraft API")
                         .description("API backend de la plateforme SaaS de création de contenu assistée par IA")
                         .version("1.0.0")
                         .license(new License().name("Proprietary")))

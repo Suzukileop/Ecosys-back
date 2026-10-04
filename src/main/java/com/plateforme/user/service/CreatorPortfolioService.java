@@ -105,12 +105,12 @@ public class CreatorPortfolioService {
     private User requireCreatorUser(UUID userId) {
         User user = userRepository.findByIdAndDeletedAtIsNull(userId)
                 .orElseThrow(() -> new BusinessException("USER_NOT_FOUND",
-                        "Utilisateur introuvable : " + userId));
+                        "User not found."));
         boolean hasCreatorRole = user.getRoles().stream()
                 .anyMatch(r -> "ROLE_CREATOR".equals(r.getName()));
         if (!hasCreatorRole) {
             throw new BusinessException("ROLE_REQUIRED",
-                    "L'utilisateur doit avoir le rôle CREATOR pour gérer un profil créateur");
+                    "Only creators can manage a creator profile.");
         }
         return user;
     }

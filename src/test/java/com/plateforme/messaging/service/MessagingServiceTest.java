@@ -11,6 +11,7 @@ import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorResponseTimeService;
+import com.plateforme.user.service.UserSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -69,6 +70,8 @@ class MessagingServiceTest {
     private NotificationService notificationService;
     @Mock
     private CreatorResponseTimeService creatorResponseTimeService;
+    @Mock
+    private UserSettingsService userSettingsService;
 
     @InjectMocks
     private MessagingService messagingService;

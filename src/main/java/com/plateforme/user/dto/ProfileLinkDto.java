@@ -9,7 +9,9 @@ public record ProfileLinkDto(
         String url,
         int sortOrder,
         String platform,
-        String iconUrl
+        String iconUrl,
+        /** When true the link is left out of the generated CV. */
+        Boolean hideFromCv
 ) {
     public ProfileLinkDto {
         type = type != null ? type.trim().toUpperCase() : "CUSTOM";

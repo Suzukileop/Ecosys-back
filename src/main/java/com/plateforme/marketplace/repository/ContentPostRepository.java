@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -84,26 +85,125 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
 
     long countByCreator_Id(UUID creatorId);
 
+    List<ContentPost> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId);
+
     long countByCreator_IdAndIsPublicTrue(UUID creatorId);
 
-    @Query("""
-            SELECT cp FROM ContentPost cp
-            WHERE cp.isPublic = true
-            AND cp.archivedAt IS NULL
-            AND (:creatorId IS NULL OR cp.creator.id = :creatorId)
-            AND (:genre IS NULL OR cp.genre = :genre)
-            AND (:q IS NULL OR :q = ''
-                OR LOWER(COALESCE(cp.title, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR LOWER(COALESCE(cp.genre, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR LOWER(COALESCE(cp.description, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR LOWER(COALESCE(cp.moodLabel, '')) LIKE LOWER(CONCAT('%', :q, '%'))
-                OR LOWER(CAST(cp.tags AS string)) LIKE LOWER(CONCAT('%', :q, '%')))
-            ORDER BY cp.pinnedAt DESC NULLS LAST, cp.createdAt DESC
-            """)
+    /**
+     * Public feed search — same keyword pipeline as the creator search ({@code CreatorSearchExpand}):
+     * the raw query, its canonical specialty and expanded synonyms/tools are matched against the post
+     * and its author's profile (specialties, tags, tools, bio). 2–3 letter alphanumeric terms
+     * ("ai", "ui", "3d") match whole words only, so "ai" does not hit "email" or "paint".
+     * :q / :qCanonical / :terms are '' when unused.
+     */
+    @Query(value = """
+            SELECT cp.* FROM content_posts cp
+            INNER JOIN users u ON u.id = cp.creator_id
+            LEFT JOIN creator_profiles prof ON prof.user_id = cp.creator_id
+            CROSS JOIN LATERAL (
+                SELECT
+                    LOWER(COALESCE(cp.title, '')) AS title,
+                    LOWER(COALESCE(cp.genre, '')) AS genre,
+                    LOWER(COALESCE(cp.tags::text, '')) AS tags,
+                    LOWER(COALESCE(cp.tools_used::text, '')) AS tools,
+                    LOWER(CONCAT_WS(' ', cp.description, cp.mood_label, cp.price_info)) AS body,
+                    LOWER(CONCAT_WS(' ', prof.specialite, prof.specialties::text, prof.specialty_tags::text,
+                        prof.strengths_tools_mastered::text, prof.profile_services::text)) AS skills,
+                    LOWER(CONCAT_WS(' ', u.full_name, prof.shop_name, prof.bio)) AS author
+            ) s
+            WHERE cp.deleted_at IS NULL
+            AND u.deleted_at IS NULL
+            AND cp.is_public = true
+            AND cp.archived_at IS NULL
+            AND (CAST(:creatorId AS UUID) IS NULL OR cp.creator_id = CAST(:creatorId AS UUID))
+            AND (CAST(:genre AS VARCHAR) IS NULL OR cp.genre = CAST(:genre AS VARCHAR))
+            AND (
+                CAST(:terms AS VARCHAR) = ''
+                OR EXISTS (
+                    SELECT 1 FROM unnest(string_to_array(CAST(:terms AS VARCHAR), '|')) AS x(term)
+                    WHERE length(btrim(term)) >= 2
+                    AND (
+                        CASE
+                          WHEN LOWER(btrim(term)) ~ '^[a-z0-9]{2,3}$'
+                          THEN CONCAT_WS(' ', s.title, s.genre, s.tags, s.tools, s.body, s.skills, s.author)
+                               ~ ('\\m' || LOWER(btrim(term)) || '\\M')
+                          ELSE CONCAT_WS(' ', s.title, s.genre, s.tags, s.tools, s.body, s.skills, s.author)
+                               LIKE CONCAT('%', LOWER(btrim(term)), '%')
+                        END
+                    )
+                )
+            )
+            ORDER BY (
+                CASE
+                  WHEN CAST(:q AS VARCHAR) = '' THEN 0
+                  WHEN s.genre = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                    OR EXISTS (
+                        SELECT 1 FROM jsonb_array_elements_text(COALESCE(cp.tags, '[]'::jsonb)) tag
+                        WHERE LOWER(TRIM(tag)) = LOWER(TRIM(CAST(:q AS VARCHAR)))
+                           OR (CAST(:qCanonical AS VARCHAR) <> '' AND LOWER(TRIM(tag)) = LOWER(CAST(:qCanonical AS VARCHAR)))
+                    )
+                  THEN 100
+                  WHEN s.title LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%')) THEN 80
+                  WHEN s.tags LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                    OR s.genre LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                  THEN 60
+                  WHEN s.tools LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%')) THEN 50
+                  WHEN s.skills LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
+                    OR (CAST(:qCanonical AS VARCHAR) <> ''
+                        AND s.skills LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%')))
+                  THEN 40
+                  WHEN s.body LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%')) THEN 30
+                  WHEN s.author LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%')) THEN 20
+                  ELSE 10
+                END
+            ) DESC,
+            cp.pinned_at DESC NULLS LAST,
+            cp.created_at DESC
+            """,
+            countQuery = """
+            SELECT COUNT(*) FROM content_posts cp
+            INNER JOIN users u ON u.id = cp.creator_id
+            LEFT JOIN creator_profiles prof ON prof.user_id = cp.creator_id
+            CROSS JOIN LATERAL (
+                SELECT CONCAT_WS(' ',
+                    LOWER(COALESCE(cp.title, '')),
+                    LOWER(COALESCE(cp.genre, '')),
+                    LOWER(COALESCE(cp.tags::text, '')),
+                    LOWER(COALESCE(cp.tools_used::text, '')),
+                    LOWER(CONCAT_WS(' ', cp.description, cp.mood_label, cp.price_info)),
+                    LOWER(CONCAT_WS(' ', prof.specialite, prof.specialties::text, prof.specialty_tags::text,
+                        prof.strengths_tools_mastered::text, prof.profile_services::text)),
+                    LOWER(CONCAT_WS(' ', u.full_name, prof.shop_name, prof.bio))
+                ) AS haystack
+            ) s
+            WHERE cp.deleted_at IS NULL
+            AND u.deleted_at IS NULL
+            AND cp.is_public = true
+            AND cp.archived_at IS NULL
+            AND (CAST(:creatorId AS UUID) IS NULL OR cp.creator_id = CAST(:creatorId AS UUID))
+            AND (CAST(:genre AS VARCHAR) IS NULL OR cp.genre = CAST(:genre AS VARCHAR))
+            AND (
+                CAST(:terms AS VARCHAR) = ''
+                OR EXISTS (
+                    SELECT 1 FROM unnest(string_to_array(CAST(:terms AS VARCHAR), '|')) AS x(term)
+                    WHERE length(btrim(term)) >= 2
+                    AND (
+                        CASE
+                          WHEN LOWER(btrim(term)) ~ '^[a-z0-9]{2,3}$'
+                          THEN s.haystack ~ ('\\m' || LOWER(btrim(term)) || '\\M')
+                          ELSE s.haystack LIKE CONCAT('%', LOWER(btrim(term)), '%')
+                        END
+                    )
+                )
+            )
+            """,
+            nativeQuery = true)
     Page<ContentPost> findPublicFiltered(
             @Param("creatorId") UUID creatorId,
             @Param("genre") String genre,
             @Param("q") String q,
+            @Param("qCanonical") String qCanonical,
+            @Param("terms") String terms,
             Pageable pageable);
 
     @Query("""

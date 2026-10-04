@@ -75,6 +75,13 @@ app:
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080}
   r2:
     # true = uploads vers Cloudflare R2 (sinon fichiers locaux + /api/storage)
+    #
+    # Redimensionnement : en local, /api/storage/<cle>?w=<px> renvoie le rendu stocke le plus
+    # proche (voir ImageRenditions + StorageController), et le genere s'il manque. R2 ne sait pas
+    # redimensionner : une fois enabled=true, les nouveaux uploads ecrivent bien leurs rendus
+    # (cles "<cle>__w256.jpg", 640, 1280, 2048) mais rien ne les choisit a la lecture. Activer
+    # Cloudflare Image Resizing sur le domaine public du bucket, OU faire un backfill des rendus
+    # pour les fichiers deja en place avant de basculer.
     enabled: ${R2_ENABLED:false}
     bucket: ${R2_BUCKET:}
     # Base S3 uniquement : https://<ACCOUNT_ID>.r2.cloudflarestorage.com (sans /nom-bucket ; retiré auto si présent)
@@ -86,6 +93,14 @@ app:
 
 server:
   port: 8080
+  compression:
+    # Les reponses JSON partaient non compressees : ~4x plus d'octets sur chaque appel API,
+    # ce qui se paie entierement sur une liaison lente (tunnel, mobile).
+    # Les medias sont exclus : images/videos sont deja compressees, les regzipper coute du CPU
+    # pour rien et casse les requetes Range.
+    enabled: true
+    mime-types: application/json,application/problem+json,text/plain,text/css,text/javascript,application/javascript
+    min-response-size: 1KB
 
 scheduling:
   enabled: true

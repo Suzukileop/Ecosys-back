@@ -5,6 +5,7 @@ import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.security.JwtUtils;
 import com.plateforme.auth.service.AuthService;
+import com.plateforme.shared.util.LogMasking;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.presence.PresenceService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,7 +43,7 @@ public class AuthController {
     })
     @PostMapping("/signup")
     public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest request) {
-        log.info("Tentative d'inscription pour: {}", request.email());
+        log.info("Tentative d'inscription pour: {}", LogMasking.email(request.email()));
         AuthResponse response = authService.signup(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -55,7 +56,7 @@ public class AuthController {
     })
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-        log.info("Tentative de connexion pour: {}", request.email());
+        log.info("Tentative de connexion pour: {}", LogMasking.email(request.email()));
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
     }

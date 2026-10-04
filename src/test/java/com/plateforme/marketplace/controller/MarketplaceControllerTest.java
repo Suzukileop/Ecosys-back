@@ -68,7 +68,8 @@ class MarketplaceControllerTest {
                 0L,
                 0L,
                 0L,
-                null,
+                0L,
+                false,
                 "BANNER",
                 "DEFAULT",
                 "LEFT",
@@ -130,7 +131,7 @@ class MarketplaceControllerTest {
     @Test
     @DisplayName("GET /contents avec genre → délègue au service")
     void getPublicContents_filterByGenre() throws Exception {
-        when(contentPostService.getPublicPosts(isNull(), eq("Tech"), isNull(), any()))
+        when(contentPostService.getPublicPosts(isNull(), eq("Tech"), isNull(), any(), isNull()))
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
 
         mockMvc.perform(get("/api/marketplace/contents").param("genre", "Tech"))

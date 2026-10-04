@@ -9,8 +9,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.Delete;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectsRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
+import software.amazon.awssdk.services.s3.model.ObjectIdentifier;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
@@ -19,6 +23,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequ
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 
 @Service
@@ -75,13 +80,7 @@ public class R2StorageService implements StorageService {
     public String uploadFile(MultipartFile file, String objectKey) throws IOException {
         validateMultipart(file, objectKey);
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
-        byte[] payload = file.getBytes();
-        var normalized = DisplayImageNormalizer.maybeNormalize(payload, contentType);
-        if (normalized.isPresent()) {
-            payload = normalized.get().bytes();
-            contentType = normalized.get().contentType();
-        }
-        return uploadPublicFile(objectKey, new java.io.ByteArrayInputStream(payload), payload.length, contentType);
+        return uploadPublicImage(objectKey, file.getBytes(), contentType);
     }
 
     @Override
@@ -108,6 +107,9 @@ public class R2StorageService implements StorageService {
     public String uploadPrivateFile(MultipartFile file, String objectKey) throws IOException {
         validateMarketplacePrivateFile(file);
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+        if (ImageRenditions.isSupported(contentType)) {
+            return uploadPrivateImage(objectKey, file.getBytes(), contentType);
+        }
         return uploadPrivateFile(objectKey, file.getInputStream(), file.getSize(), contentType);
     }
 
@@ -120,7 +122,43 @@ public class R2StorageService implements StorageService {
                 .bucket(r2.bucket())
                 .key(objectKey)
                 .build());
+        /* Derivatives live beside the canonical object under a "__w<width>" suffix. */
+        for (int width : ImageRenditions.DERIVATIVE_WIDTHS) {
+            for (String type : new String[] {"image/jpeg", "image/png"}) {
+                try {
+                    s3Client.deleteObject(DeleteObjectRequest.builder()
+                            .bucket(r2.bucket())
+                            .key(ImageRenditions.derivativeKey(objectKey, width, type))
+                            .build());
+                } catch (RuntimeException ex) {
+                    log.debug("R2 derivative delete skipped key={} w={}: {}", objectKey, width, ex.toString());
+                }
+            }
+        }
         log.info("R2 DeleteObject bucket={} key={}", r2.bucket(), objectKey);
+    }
+
+    @Override
+    public int deleteByPrefix(String prefix) throws IOException {
+        LocalDevStorageService.requireFolderPrefix(prefix);
+        List<ObjectIdentifier> keys = s3Client.listObjectsV2Paginator(ListObjectsV2Request.builder()
+                        .bucket(r2.bucket())
+                        .prefix(prefix)
+                        .build())
+                .contents()
+                .stream()
+                .map(object -> ObjectIdentifier.builder().key(object.key()).build())
+                .toList();
+        /* DeleteObjects accepts at most 1000 keys per call. */
+        for (int from = 0; from < keys.size(); from += 1000) {
+            List<ObjectIdentifier> batch = keys.subList(from, Math.min(from + 1000, keys.size()));
+            s3Client.deleteObjects(DeleteObjectsRequest.builder()
+                    .bucket(r2.bucket())
+                    .delete(Delete.builder().objects(batch).quiet(true).build())
+                    .build());
+        }
+        log.info("R2 DeleteByPrefix bucket={} prefix={} objects={}", r2.bucket(), prefix, keys.size());
+        return keys.size();
     }
 
     @Override
@@ -163,7 +201,7 @@ public class R2StorageService implements StorageService {
 
     private void validateMultipart(MultipartFile file, String objectKey) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException("FILE_REQUIRED", "Fichier requis");
+            throw new BusinessException("FILE_REQUIRED", "Please choose a file.");
         }
         if (objectKey != null && objectKey.startsWith("marketplace/public/")) {
             validateMarketplaceThumbnail(file);
@@ -190,10 +228,10 @@ public class R2StorageService implements StorageService {
         if (videoPath) {
             if (!VIDEO_TYPES.contains(ct)) {
                 throw new BusinessException("INVALID_FILE_TYPE",
-                        "Types vidéo acceptés : video/mp4, video/quicktime, video/webm");
+                        "Supported video formats: MP4, MOV and WebM.");
             }
             if (file.getSize() > MAX_VIDEO_BYTES) {
-                throw new BusinessException("FILE_TOO_LARGE", "Taille maximale vidéo : 500 Mo");
+                throw new BusinessException("FILE_TOO_LARGE", "Videos must be 500 MB or less.");
             }
         } else if (audioPath) {
             if (file.getSize() > 50L * 1024 * 1024) {
@@ -202,7 +240,7 @@ public class R2StorageService implements StorageService {
         } else {
             if (!IMAGE_TYPES.contains(ct)) {
                 throw new BusinessException("INVALID_FILE_TYPE",
-                        "Types image acceptés : image/jpeg, image/png, image/webp");
+                        "Supported image formats: JPEG, PNG and WebP.");
             }
             if (file.getSize() > MAX_IMAGE_BYTES) {
                 throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
@@ -226,13 +264,13 @@ public class R2StorageService implements StorageService {
         boolean isVideo = VIDEO_TYPES.contains(ct);
         if (!isImage && !isVideo) {
             throw new BusinessException("INVALID_FILE_TYPE",
-                    "Miniature : image (jpeg, png, webp) ou vidéo (mp4, webm, mov)");
+                    "Thumbnails must be an image (JPEG, PNG, WebP) or a video (MP4, WebM, MOV).");
         }
         if (isImage && file.getSize() > MAX_IMAGE_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
         }
         if (isVideo && file.getSize() > MAX_THUMBNAIL_VIDEO_BYTES) {
-            throw new BusinessException("FILE_TOO_LARGE", "Vidéo miniature : max 25 Mo");
+            throw new BusinessException("FILE_TOO_LARGE", "Thumbnail videos must be 25 MB or less.");
         }
     }
 
@@ -240,7 +278,7 @@ public class R2StorageService implements StorageService {
         String ct = file.getContentType() != null ? file.getContentType() : "";
         if (!IMAGE_TYPES.contains(ct)) {
             throw new BusinessException("INVALID_FILE_TYPE",
-                    "Photo de profil : image/jpeg, image/png ou image/webp");
+                    "Profile photos must be JPEG, PNG or WebP.");
         }
         if (file.getSize() > MAX_IMAGE_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
@@ -256,13 +294,13 @@ public class R2StorageService implements StorageService {
                 || (file.getOriginalFilename() != null && file.getOriginalFilename().matches("(?i).+\\.(mp3|wav|aac|m4a|ogg|flac)$"));
         if (!isImage && !isVideo && !isPdf && !isAudio) {
             throw new BusinessException("INVALID_FILE_TYPE",
-                    "Média : image (jpeg, png, webp), vidéo (mp4, webm, mov), audio (mp3, wav, aac, ogg) ou PDF");
+                    "Supported media: images (JPEG, PNG, WebP), videos (MP4, WebM, MOV), audio (MP3, WAV, AAC, OGG) or PDF.");
         }
         if (isImage && file.getSize() > MAX_IMAGE_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale image : 30 Mo");
         }
         if (isVideo && file.getSize() > MAX_VIDEO_BYTES) {
-            throw new BusinessException("FILE_TOO_LARGE", "Taille maximale vidéo : 500 Mo");
+            throw new BusinessException("FILE_TOO_LARGE", "Videos must be 500 MB or less.");
         }
         if (isPdf && file.getSize() > MAX_CONTENT_PDF_BYTES) {
             throw new BusinessException("FILE_TOO_LARGE", "Taille maximale PDF : 50 Mo");

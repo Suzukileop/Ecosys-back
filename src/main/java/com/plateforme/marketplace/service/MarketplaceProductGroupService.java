@@ -39,7 +39,7 @@ public class MarketplaceProductGroupService {
     @Transactional
     public ProductGroupResponse createGroup(UUID creatorId, ProductGroupRequest req) {
         User creator = userRepository.findByIdAndDeletedAtIsNull(creatorId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + creatorId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
 
         String name = normalizeName(req.name());
         assertUniqueName(creatorId, name, null);
@@ -94,17 +94,17 @@ public class MarketplaceProductGroupService {
     @Transactional(readOnly = true)
     public Page<ProductGroupResponse> getPublicGroups(UUID creatorId, Pageable pageable) {
         userRepository.findByIdAndDeletedAtIsNull(creatorId)
-                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found: " + creatorId));
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
         return groupRepository.findByCreator_IdOrderBySortOrderAscCreatedAtAsc(creatorId, pageable)
-                .map(this::toResponse);
+                .map(this::toPublicResponse);
     }
 
     @Transactional(readOnly = true)
     public ProductGroupResponse getPublicGroup(UUID creatorId, UUID groupId) {
         MarketplaceProductGroup group = groupRepository.findByIdAndCreator_Id(groupId, creatorId)
                 .orElseThrow(() -> new BusinessException("PRODUCT_GROUP_NOT_FOUND",
-                        "Product group not found: " + groupId));
-        return toResponse(group);
+                        "Product group not found."));
+        return toPublicResponse(group);
     }
 
     private void replaceItems(MarketplaceProductGroup group, UUID creatorId, List<UUID> productIds) {
@@ -116,7 +116,7 @@ public class MarketplaceProductGroupService {
         for (UUID productId : uniqueIds) {
             MarketplaceProduct product = productRepository.findById(productId)
                     .orElseThrow(() -> new BusinessException("PRODUCT_NOT_FOUND",
-                            "Product not found: " + productId));
+                            "Product not found."));
             UUID ownerId = product.getCreator() != null ? product.getCreator().getId() : null;
             if (!Objects.equals(ownerId, creatorId)) {
                 throw new AccessDeniedException("Product " + productId + " does not belong to the current user");
@@ -151,11 +151,25 @@ public class MarketplaceProductGroupService {
     private MarketplaceProductGroup requireOwnedGroup(UUID creatorId, UUID groupId) {
         return groupRepository.findByIdAndCreator_Id(groupId, creatorId)
                 .orElseThrow(() -> new BusinessException("PRODUCT_GROUP_NOT_FOUND",
-                        "Product group not found: " + groupId));
+                        "Product group not found."));
     }
 
     private ProductGroupResponse toResponse(MarketplaceProductGroup group) {
-        List<UUID> productIds = groupItemRepository.findByProductGroup_IdOrderBySortOrderAsc(group.getId())
+        return toResponse(group, false);
+    }
+
+    private ProductGroupResponse toPublicResponse(MarketplaceProductGroup group) {
+        return toResponse(group, true);
+    }
+
+    /** Counts only live products; the public shop additionally hides drafts. */
+    private ProductGroupResponse toResponse(MarketplaceProductGroup group, boolean publishedOnly) {
+        List<MarketplaceProductGroupItem> items = publishedOnly
+                ? groupItemRepository
+                        .findByProductGroup_IdAndProduct_DeletedAtIsNullAndProduct_IsPublishedTrueOrderBySortOrderAsc(
+                                group.getId())
+                : groupItemRepository.findByProductGroup_IdAndProduct_DeletedAtIsNullOrderBySortOrderAsc(group.getId());
+        List<UUID> productIds = items
                 .stream()
                 .map(item -> item.getProduct().getId())
                 .toList();

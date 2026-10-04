@@ -26,17 +26,19 @@ public record ProfileMediaBlock(
         /** City / remote — experience blocks only. */
         String location,
         /** FULL_TIME | PART_TIME | CONTRACT | FREELANCE | INTERNSHIP — experience blocks only. */
-        String employmentType
+        String employmentType,
+        /** True keeps this experience out of the generated CV; null/false shows it. */
+        Boolean hideFromCv
 ) {
     public ProfileMediaBlock(UUID id, int sortOrder, String text, String mediaUrl, String mediaType) {
         this(id, sortOrder, null, null, text, mediaUrl, mediaType, null,
-                null, List.of(), List.of(), List.of(), null, null);
+                null, List.of(), List.of(), List.of(), null, null, null);
     }
 
     public ProfileMediaBlock(UUID id, int sortOrder, String text, String mediaUrl, String mediaType,
                              String period) {
         this(id, sortOrder, null, null, text, mediaUrl, mediaType, period,
-                null, List.of(), List.of(), List.of(), null, null);
+                null, List.of(), List.of(), List.of(), null, null, null);
     }
 
     public ProfileMediaBlock {

@@ -56,7 +56,7 @@ public class AuthService {
     @Transactional
     public AuthResponse signup(SignupRequest request) {
         if (userRepository.existsByEmail(request.email())) {
-            throw new BusinessException("EMAIL_ALREADY_EXISTS", "Un compte avec cet email existe déjà");
+            throw new BusinessException("EMAIL_ALREADY_EXISTS", "An account with this email already exists.");
         }
 
         String username = UsernameSupport.normalize(request.username());
@@ -64,7 +64,7 @@ public class AuthService {
 
         String roleName = "ROLE_CREATOR";
         Role role = roleRepository.findByName(roleName)
-                .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Rôle introuvable: " + roleName));
+                .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role not found."));
 
         User user = new User();
         user.setEmail(request.email());
@@ -74,12 +74,12 @@ public class AuthService {
         user.setRoles(Set.of(role));
 
         user = userRepository.save(user);
-        log.info("Nouvel utilisateur créé: {} (@{}) avec rôle {}", user.getEmail(), user.getPublicUsername(), roleName);
+        log.info("Nouvel utilisateur créé: {} avec rôle {}", user.getId(), roleName);
 
         CreatorProfile profile = new CreatorProfile();
         profile.setUser(user);
         entityManager.persist(profile);
-        log.info("Profil créateur créé pour l'utilisateur: {}", user.getEmail());
+        log.info("Profil créateur créé pour l'utilisateur: {}", user.getId());
 
         String accessToken = jwtUtils.generateAccessToken(user);
         RefreshToken refreshToken = createRefreshToken(user);
@@ -102,21 +102,21 @@ public class AuthService {
         String accessToken = jwtUtils.generateAccessToken(user);
         RefreshToken refreshToken = createRefreshToken(user);
 
-        log.info("Connexion réussie pour: {}", user.getEmail());
+        log.info("Connexion réussie pour: {}", user.getId());
         return buildAuthResponse(accessToken, refreshToken.getToken(), user);
     }
 
     @Transactional
     public AuthResponse refreshToken(String refreshTokenValue) {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(refreshTokenValue)
-                .orElseThrow(() -> new BusinessException("INVALID_REFRESH_TOKEN", "Refresh token invalide"));
+                .orElseThrow(() -> new BusinessException("INVALID_REFRESH_TOKEN", "Your session is invalid. Please sign in again."));
 
         if (Boolean.TRUE.equals(refreshToken.getIsRevoked())) {
-            throw new BusinessException("REVOKED_REFRESH_TOKEN", "Refresh token révoqué");
+            throw new BusinessException("REVOKED_REFRESH_TOKEN", "Your session has ended. Please sign in again.");
         }
 
         if (refreshToken.getExpiryDate().isBefore(LocalDateTime.now())) {
-            throw new BusinessException("EXPIRED_REFRESH_TOKEN", "Refresh token expiré");
+            throw new BusinessException("EXPIRED_REFRESH_TOKEN", "Your session has expired. Please sign in again.");
         }
 
         User user = refreshToken.getUser();
@@ -128,7 +128,7 @@ public class AuthService {
         RefreshToken newRefreshToken = createRefreshToken(user);
         String newAccessToken = jwtUtils.generateAccessToken(user);
 
-        log.info("Access token renouvelé pour: {}", user.getEmail());
+        log.info("Access token renouvelé pour: {}", user.getId());
         return buildAuthResponse(newAccessToken, newRefreshToken.getToken(), user);
     }
 
@@ -138,7 +138,7 @@ public class AuthService {
             token.setIsRevoked(true);
             token.setRevokedAt(LocalDateTime.now());
             refreshTokenRepository.save(token);
-            log.info("Refresh token révoqué pour l'utilisateur: {}", token.getUser().getEmail());
+            log.info("Refresh token révoqué pour l'utilisateur: {}", token.getUser().getId());
         });
 
         if (accessTokenJti != null && accessTokenRemainingMs > 0) {

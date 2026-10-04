@@ -1,5 +1,6 @@
 package com.plateforme.user.service;
 
+import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.entity.CreatorFollow;
@@ -43,6 +44,8 @@ class CreatorFollowServiceTest {
     private UserRepository userRepository;
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private PublicMediaUrlResolver publicMediaUrlResolver;
 
     @InjectMocks
     private CreatorFollowService creatorFollowService;

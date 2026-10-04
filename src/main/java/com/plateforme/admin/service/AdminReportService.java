@@ -34,7 +34,7 @@ public class AdminReportService {
     @Transactional
     public ReportResponse updateReport(UUID reportId, UpdateReportRequest request) {
         ContentReport report = reportRepository.findById(reportId)
-                .orElseThrow(() -> new BusinessException("REPORT_NOT_FOUND", "Report not found: " + reportId));
+                .orElseThrow(() -> new BusinessException("REPORT_NOT_FOUND", "Report not found."));
 
         if (request.status() != null) {
             report.setStatus(request.status());
