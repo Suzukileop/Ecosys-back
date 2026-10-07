@@ -41,10 +41,6 @@ public interface ContentCommentRepository extends JpaRepository<ContentComment, 
     List<ContentComment> findRepliesVisible(
             @Param("parentIds") Collection<UUID> parentIds,
             @Param("includeHidden") boolean includeHidden);
-
-    long countByTargetTypeAndTargetIdAndDeletedAtIsNullAndHiddenAtIsNull(
-            ContentTargetType targetType, UUID targetId);
-
     /**
      * Visible comment count for several targets at once. A feed page used to cost one count query
      * per card — and one HTTP round trip per card, because the browser asked for them one by one.

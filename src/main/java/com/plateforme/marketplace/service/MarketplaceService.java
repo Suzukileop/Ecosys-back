@@ -7,7 +7,7 @@ import com.plateforme.marketplace.dto.SocialLink;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.marketplace.util.SocialLinksJsonParser;
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.ContactVisibilityLevel;
 import com.plateforme.user.dto.ContactVisibilitySettings;

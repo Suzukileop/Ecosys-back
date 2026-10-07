@@ -12,8 +12,6 @@ public interface CreatorProfileImageRepository extends JpaRepository<CreatorProf
 
     List<CreatorProfileImage> findByUserIdOrderByCreatedAtDesc(UUID userId);
 
-    List<CreatorProfileImage> findByUserIdAndKindOrderByCreatedAtDesc(UUID userId, CreatorProfileImageKind kind);
-
     Optional<CreatorProfileImage> findByUserIdAndKindAndUrl(UUID userId, CreatorProfileImageKind kind, String url);
 
     Optional<CreatorProfileImage> findByIdAndUserId(UUID id, UUID userId);

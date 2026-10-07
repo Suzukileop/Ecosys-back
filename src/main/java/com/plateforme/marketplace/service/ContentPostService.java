@@ -5,12 +5,16 @@ import com.plateforme.marketplace.dto.ContentPostRequest;
 import com.plateforme.marketplace.dto.ContentPostResponse;
 import com.plateforme.marketplace.dto.MinimalUserDto;
 import com.plateforme.marketplace.entity.ContentPost;
+import com.plateforme.marketplace.entity.ContentPostHide;
 import com.plateforme.marketplace.entity.ContentTargetType;
 import com.plateforme.marketplace.entity.ReactionType;
 import com.plateforme.marketplace.repository.ContentCommentRepository;
+import com.plateforme.marketplace.repository.ContentFavoriteRepository;
+import com.plateforme.marketplace.repository.ContentPostHideRepository;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.marketplace.repository.ContentReactionRepository;
 import com.plateforme.shared.exception.BusinessException;
+import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.User;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.UserRepository;
@@ -42,11 +46,15 @@ public class ContentPostService {
 
     private static final int MAX_TAGGED_USERS = 5;
     private static final int MAX_LIST_ITEMS = 10;
+    private static final int MAX_GALLERY_IMAGES = 10;
+    private static final int MAX_REPOST_COMMENT = 3000;
     private static final Set<String> ALLOWED_MEDIA_TYPES = Set.of("FILE", "GIF");
 
     private final ContentPostRepository contentPostRepository;
     private final ContentCommentRepository contentCommentRepository;
     private final ContentReactionRepository contentReactionRepository;
+    private final ContentFavoriteRepository contentFavoriteRepository;
+    private final ContentPostHideRepository contentPostHideRepository;
     private final UserRepository userRepository;
     private final CreatorProfileRepository creatorProfileRepository;
     private final FollowerPublishNotifyService followerPublishNotifyService;
@@ -84,7 +92,8 @@ public class ContentPostService {
             case TRASH -> contentPostRepository.findTrashByCreatorId(creatorId, pageable);
             case ACTIVE -> contentPostRepository.findActiveByCreatorId(creatorId, pageable);
         };
-        return page.map(p -> toResponse(p, portfolioCount));
+        CreatorProfile profile = creatorProfileRepository.findByUserId(creatorId).orElse(null);
+        return page.map(p -> buildResponse(p, portfolioCount, null, null, profile, singleExtras(p)));
     }
 
     @Transactional(readOnly = true)
@@ -286,22 +295,43 @@ public class ContentPostService {
             }
         }
 
-        Page<ContentPost> page =
-                contentPostRepository.findPublicFiltered(creatorId, g, q != null ? q : "", qCanonical, terms, pageable);
+        Page<ContentPost> page = contentPostRepository.findPublicFiltered(
+                creatorId, viewerId, g, q != null ? q : "", qCanonical, terms, pageable);
+        return enrichPage(page, viewerId);
+    }
+
+    /** Public posts the viewer saved, most recently saved first. */
+    @Transactional(readOnly = true)
+    public Page<ContentPostResponse> getSavedPosts(UUID viewerId, Pageable pageable) {
+        return enrichPage(contentPostRepository.findSavedByUserId(viewerId, pageable), viewerId);
+    }
+
+    /**
+     * Everything the cards need, resolved once for the whole page. Done per post this was a COUNT per
+     * card for the portfolio total, plus — because the counts were missing from the payload entirely —
+     * two HTTP round trips per card from the browser for the comment count and the viewer's own reaction.
+     */
+    private Page<ContentPostResponse> enrichPage(Page<ContentPost> page, UUID viewerId) {
         if (page.isEmpty()) {
             return page.map(p -> toResponse(p, 0L));
         }
 
-        /*
-         * Everything the cards need, resolved once for the whole page. Done per post this was a
-         * COUNT per card for the portfolio total, plus — because the counts were missing from the
-         * payload entirely — two HTTP round trips per card from the browser for the comment count
-         * and the viewer's own reaction.
-         */
-        List<UUID> postIds = page.getContent().stream().map(ContentPost::getId).toList();
-        Set<UUID> creatorIds = page.getContent().stream()
-                .map(post -> post.getCreator().getId())
+        List<ContentPost> posts = page.getContent();
+        List<UUID> postIds = posts.stream().map(ContentPost::getId).toList();
+
+        /* Originals of the reposts on this page; a trashed original is simply absent here. */
+        Set<UUID> originalIds = posts.stream()
+                .map(ContentPost::getRepostOfId)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
+        Map<UUID, ContentPost> originals = originalIds.isEmpty()
+                ? Map.of()
+                : contentPostRepository.findAllById(originalIds).stream()
+                        .collect(Collectors.toMap(ContentPost::getId, o -> o, (a, b) -> a));
+
+        Set<UUID> creatorIds = new java.util.HashSet<>();
+        posts.forEach(post -> creatorIds.add(post.getCreator().getId()));
+        originals.values().forEach(original -> creatorIds.add(original.getCreator().getId()));
 
         Map<UUID, Long> portfolioCounts = new LinkedHashMap<>();
         for (UUID cid : creatorIds) {
@@ -315,14 +345,125 @@ public class ContentPostService {
 
         Set<UUID> likedByViewer = viewerId == null
                 ? Set.of()
-                : Set.copyOf(contentReactionRepository.findTargetIdsByUser_IdAndTargetTypeAndType(
-                        viewerId, ContentTargetType.POST, ReactionType.LIKE));
+                : Set.copyOf(contentReactionRepository.findTargetIdsAmong(
+                        viewerId, ContentTargetType.POST, ReactionType.LIKE, postIds));
 
-        return page.map(post -> toResponse(
-                post,
-                portfolioCounts.getOrDefault(post.getCreator().getId(), 0L),
-                commentCounts.getOrDefault(post.getId(), 0L),
-                likedByViewer.contains(post.getId()) ? ReactionType.LIKE.name() : null));
+        Set<UUID> savedByViewer = viewerId == null
+                ? Set.of()
+                : Set.copyOf(contentFavoriteRepository.findTargetIdsAmong(
+                        viewerId, ContentTargetType.POST, postIds));
+
+        /* A repost card's repost button acts on the original, so counts are keyed by that id. */
+        Set<UUID> repostTargets = posts.stream().map(ContentPostService::repostTarget).collect(Collectors.toSet());
+        Map<UUID, Long> repostCounts = new LinkedHashMap<>();
+        for (Object[] row : contentPostRepository.countRepostsByOriginalIds(repostTargets)) {
+            repostCounts.put((UUID) row[0], (Long) row[1]);
+        }
+        Set<UUID> repostedByViewer = viewerId == null
+                ? Set.of()
+                : Set.copyOf(contentPostRepository.findRepostedOriginalIds(viewerId, repostTargets));
+
+        Map<UUID, CreatorProfile> profiles = creatorProfileRepository.findByUser_IdIn(creatorIds).stream()
+                .collect(Collectors.toMap(p -> p.getUser().getId(), p -> p, (a, b) -> a));
+
+        return page.map(post -> {
+            UUID target = repostTarget(post);
+            ContentPost original = post.getRepostOfId() != null ? originals.get(post.getRepostOfId()) : null;
+            ContentPostResponse embedded = original == null
+                    ? null
+                    : buildResponse(original, 0L, null, null,
+                            profiles.get(original.getCreator().getId()), PostExtras.NONE);
+            return buildResponse(
+                    post,
+                    portfolioCounts.getOrDefault(post.getCreator().getId(), 0L),
+                    commentCounts.getOrDefault(post.getId(), 0L),
+                    likedByViewer.contains(post.getId()) ? ReactionType.LIKE.name() : null,
+                    profiles.get(post.getCreator().getId()),
+                    new PostExtras(
+                            embedded,
+                            repostCounts.getOrDefault(target, 0L),
+                            viewerId == null ? null : repostedByViewer.contains(target),
+                            viewerId == null ? null : savedByViewer.contains(post.getId())));
+        });
+    }
+
+    /** The post a repost button on this card acts on: the original for a repost, the post itself otherwise. */
+    private static UUID repostTarget(ContentPost post) {
+        return post.getRepostOfId() != null ? post.getRepostOfId() : post.getId();
+    }
+
+    /** Repost / save state that rides along a response; {@link #NONE} when a route does not compute it. */
+    private record PostExtras(
+            ContentPostResponse repostOf, long repostCount, Boolean viewerReposted, Boolean viewerSaved) {
+        static final PostExtras NONE = new PostExtras(null, 0L, null, null);
+    }
+
+    @Transactional
+    public ContentPostResponse repostPost(UUID creatorId, UUID postId, String comment) {
+        User creator = userRepository.findByIdAndDeletedAtIsNull(creatorId)
+                .orElseThrow(() -> new BusinessException("USER_NOT_FOUND", "User not found."));
+
+        ContentPost original = requirePublicPost(postId);
+        /* Reposting a repost reposts what it points at — chains never nest. */
+        if (original.getRepostOfId() != null) {
+            original = requirePublicPost(original.getRepostOfId());
+        }
+        if (Objects.equals(original.getCreator().getId(), creatorId)) {
+            throw new BusinessException("REPOST_OWN_POST", "You cannot repost your own post.");
+        }
+        if (contentPostRepository.findFirstByCreator_IdAndRepostOfId(creatorId, original.getId()).isPresent()) {
+            throw new BusinessException("ALREADY_REPOSTED", "You already reposted this post.");
+        }
+        String note = blankToNull(comment);
+        if (note != null && note.length() > MAX_REPOST_COMMENT) {
+            throw new BusinessException("REPOST_COMMENT_TOO_LONG",
+                    "Your comment is too long (max " + MAX_REPOST_COMMENT + " characters).");
+        }
+
+        ContentPost repost = new ContentPost();
+        repost.setCreator(creator);
+        repost.setRepostOfId(original.getId());
+        repost.setTitle(note);
+        repost.setIsPublic(true);
+        repost.setCommentsEnabled(true);
+        repost = contentPostRepository.save(repost);
+
+        log.info("Repost created id={} original={} by creator={}", repost.getId(), original.getId(), creatorId);
+        return toResponse(repost, contentPostRepository.countActiveByCreator_Id(creatorId));
+    }
+
+    /** Undoes the creator's repost of {@code postId} (the original, or one of its reposts). */
+    @Transactional
+    public void undoRepost(UUID creatorId, UUID postId) {
+        ContentPost target = contentPostRepository.findById(postId).orElse(null);
+        UUID originalId = target != null && target.getRepostOfId() != null ? target.getRepostOfId() : postId;
+        ContentPost repost = contentPostRepository.findFirstByCreator_IdAndRepostOfId(creatorId, originalId)
+                .orElseThrow(() -> new BusinessException("REPOST_NOT_FOUND", "You have not reposted this post."));
+        repost.setDeletedAt(LocalDateTime.now());
+        repost.setPinnedAt(null);
+        contentPostRepository.save(repost);
+        log.info("Repost removed id={} original={} by creator={}", repost.getId(), originalId, creatorId);
+    }
+
+    @Transactional
+    public void hidePost(UUID userId, UUID postId) {
+        ContentPost post = requirePublicPost(postId);
+        if (Objects.equals(post.getCreator().getId(), userId)) {
+            throw new BusinessException("HIDE_OWN_POST", "You cannot hide your own post.");
+        }
+        if (!contentPostHideRepository.existsByUserIdAndPostId(userId, postId)) {
+            contentPostHideRepository.save(new ContentPostHide(userId, postId));
+        }
+    }
+
+    @Transactional
+    public void unhidePost(UUID userId, UUID postId) {
+        contentPostHideRepository.deleteByUserIdAndPostId(userId, postId);
+    }
+
+    private ContentPost requirePublicPost(UUID postId) {
+        return contentPostRepository.findPublicById(postId)
+                .orElseThrow(() -> new BusinessException("CONTENT_POST_NOT_FOUND", "Content not found."));
     }
 
     @Transactional(readOnly = true)
@@ -342,8 +483,32 @@ public class ContentPostService {
 
     public ContentPostResponse toResponse(
             ContentPost post, long portfolioCount, Long commentCount, String viewerReaction) {
+        CreatorProfile profile = creatorProfileRepository.findByUserId(post.getCreator().getId()).orElse(null);
+        return buildResponse(post, portfolioCount, commentCount, viewerReaction, profile, singleExtras(post));
+    }
+
+    /**
+     * Repost state for routes that build one response at a time (they do not know the viewer, so the
+     * viewer flags stay {@code null} and the client asks for them itself).
+     */
+    private PostExtras singleExtras(ContentPost post) {
+        ContentPostResponse embedded = null;
+        if (post.getRepostOfId() != null) {
+            ContentPost original = contentPostRepository.findById(post.getRepostOfId()).orElse(null);
+            if (original != null) {
+                CreatorProfile originalProfile =
+                        creatorProfileRepository.findByUserId(original.getCreator().getId()).orElse(null);
+                embedded = buildResponse(original, 0L, null, null, originalProfile, PostExtras.NONE);
+            }
+        }
+        return new PostExtras(embedded, contentPostRepository.countByRepostOfId(repostTarget(post)), null, null);
+    }
+
+    /** {@code profile} is the creator's profile, resolved by the caller so lists load it once. */
+    private ContentPostResponse buildResponse(
+            ContentPost post, long portfolioCount, Long commentCount, String viewerReaction,
+            CreatorProfile profile, PostExtras extras) {
         User creator = post.getCreator();
-        var profile = creatorProfileRepository.findByUserId(creator.getId()).orElse(null);
         String appRole = profile != null ? profile.getAppRole() : null;
         String specialite = profile != null ? profile.getSpecialite() : null;
         List<String> specialties = profile != null && profile.getSpecialties() != null
@@ -386,8 +551,21 @@ public class ContentPostService {
                 post.getCreatedAt(),
                 minimal,
                 commentCount,
-                viewerReaction
+                viewerReaction,
+                galleryOf(post),
+                extras.repostOf(),
+                extras.repostCount(),
+                extras.viewerReposted(),
+                extras.viewerSaved()
         );
+    }
+
+    /** The full ordered gallery: the stored one for multi-image posts, else just the cover. */
+    private static List<String> galleryOf(ContentPost post) {
+        if (post.getMediaUrls() != null && !post.getMediaUrls().isEmpty()) {
+            return List.copyOf(post.getMediaUrls());
+        }
+        return post.getMediaUrl() != null && !post.getMediaUrl().isBlank() ? List.of(post.getMediaUrl()) : List.of();
     }
 
     private ContentPost requireActivePost(UUID creatorId, UUID postId) {
@@ -409,7 +587,8 @@ public class ContentPostService {
     }
 
     private void validateRequest(ContentPostRequest req, UUID creatorId) {
-        boolean hasMedia = req.mediaUrl() != null && !req.mediaUrl().isBlank();
+        boolean hasMedia = (req.mediaUrl() != null && !req.mediaUrl().isBlank())
+                || !normalizeMediaUrls(req.mediaUrls()).isEmpty();
         boolean hasText = (req.title() != null && !req.title().isBlank())
                 || (req.description() != null && !req.description().isBlank());
         if (!hasMedia && !hasText) {
@@ -463,6 +642,14 @@ public class ContentPostService {
         List<String> tags = normalizeStringList(req.tags());
         String mediaUrl = req.mediaUrl() != null && !req.mediaUrl().isBlank() ? req.mediaUrl().trim() : null;
         String mediaType = normalizeMediaType(req.mediaType());
+        List<String> gallery = normalizeMediaUrls(req.mediaUrls());
+        if (!gallery.isEmpty()) {
+            /* The cover is always the first image, whatever `mediaUrl` says. */
+            mediaUrl = gallery.get(0);
+            if (gallery.size() > 1) {
+                mediaType = "FILE";
+            }
+        }
         if (mediaUrl == null) {
             mediaType = "FILE";
         } else if ("GIF".equals(mediaType)) {
@@ -473,6 +660,12 @@ public class ContentPostService {
 
         post.setTitle(blankToNull(req.title()));
         post.setGenre(blankToNull(req.genre()));
+        if (req.mediaUrls() != null) {
+            post.setMediaUrls(gallery.size() > 1 ? new ArrayList<>(gallery) : new ArrayList<>());
+        } else if (!Objects.equals(mediaUrl, post.getMediaUrl())) {
+            /* A client that predates galleries swapped the cover: the old gallery no longer applies. */
+            post.setMediaUrls(new ArrayList<>());
+        }
         post.setMediaUrl(mediaUrl);
         post.setMediaType(mediaType);
         post.setTextColor(blankToNull(req.textColor()));
@@ -506,6 +699,29 @@ public class ContentPostService {
             }
         }
         return result;
+    }
+
+    /** Trimmed, de-duplicated, order-preserving gallery; rejects more than the cap or a non-URL entry. */
+    private static List<String> normalizeMediaUrls(List<String> raw) {
+        if (raw == null || raw.isEmpty()) {
+            return List.of();
+        }
+        List<String> cleaned = raw.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(url -> !url.isEmpty())
+                .distinct()
+                .toList();
+        if (cleaned.size() > MAX_GALLERY_IMAGES) {
+            throw new BusinessException("MEDIA_URLS_LIMIT",
+                    "A post can hold at most " + MAX_GALLERY_IMAGES + " images.");
+        }
+        for (String url : cleaned) {
+            if (!url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("/")) {
+                throw new BusinessException("INVALID_MEDIA_URL", "One of the images has an invalid address.");
+            }
+        }
+        return cleaned;
     }
 
     private static String normalizeMediaType(String mediaType) {

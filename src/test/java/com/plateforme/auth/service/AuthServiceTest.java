@@ -4,7 +4,7 @@ import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.security.JwtUtils;
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.RefreshToken;
 import com.plateforme.user.entity.Role;
@@ -226,14 +226,11 @@ class AuthServiceTest {
     @Test
     void logout_success() {
         when(refreshTokenRepository.findByToken("refresh-token-value")).thenReturn(Optional.of(testRefreshToken));
-        when(refreshTokenRepository.save(any(RefreshToken.class))).thenReturn(testRefreshToken);
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
         authService.logout("refresh-token-value", "some-jti", 60000L);
 
-        verify(refreshTokenRepository).save(argThat(token ->
-                Boolean.TRUE.equals(token.getIsRevoked()) && token.getRevokedAt() != null
-        ));
+        verify(refreshTokenRepository).delete(testRefreshToken);
         verify(valueOperations).set(eq("blacklist:some-jti"), eq("revoked"), eq(60000L), any());
     }
 

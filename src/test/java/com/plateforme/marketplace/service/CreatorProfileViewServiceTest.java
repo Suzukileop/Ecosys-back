@@ -1,6 +1,6 @@
 package com.plateforme.marketplace.service;
 
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.service.NotificationService;
 import com.plateforme.user.entity.CreatorProfile;
 import com.plateforme.user.entity.CreatorProfileVisit;

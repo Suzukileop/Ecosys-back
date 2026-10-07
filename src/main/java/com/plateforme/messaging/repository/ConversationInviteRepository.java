@@ -2,7 +2,6 @@ package com.plateforme.messaging.repository;
 
 import com.plateforme.messaging.entity.ConversationInvite;
 import com.plateforme.messaging.entity.InviteStatus;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,8 +25,6 @@ public interface ConversationInviteRepository extends JpaRepository<Conversation
 
     List<ConversationInvite> findByCreatedBy_IdAndStatusAndInviteeIsNotNullOrderByCreatedAtDesc(
             UUID createdById, InviteStatus status);
-
-    List<ConversationInvite> findBySourceConversation_IdAndStatus(UUID sourceConversationId, InviteStatus status);
 
     @Query("""
             SELECT i FROM ConversationInvite i

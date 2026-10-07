@@ -36,8 +36,7 @@ public final class ProfileExtensionsSupport {
     static final int MAX_FAQ_ANSWER = 1000;
     static final int MAX_SERVICE_TITLE = 100;
     static final int MAX_SERVICE_DESC = 500;
-    static final int MAX_SERVICE_DEADLINE = 100;
-    static final int MAX_SERVICE_TASKS = 12;
+    static final int MAX_SERVICE_DEADLINE = 100;    static final int MAX_SERVICE_TASKS = 12;
     static final int MAX_SERVICE_TASK = 120;
     static final int MAX_SERVICE_TAGS = 8;
     static final int MAX_SERVICE_TAG_LENGTH = 40;
@@ -942,12 +941,15 @@ public final class ProfileExtensionsSupport {
                     deliveryUnit = parsed[1] == 1 ? "WEEKS" : "DAYS";
                 }
             }
+            String billingPeriod = "FIXED".equals(pricingType) || "FROM".equals(pricingType)
+                    ? normalizeBillingPeriod(item.billingPeriod())
+                    : null;
             UUID id = item.id() != null ? item.id() : UUID.randomUUID();
             int sortOrder = item.sortOrder() >= 0 ? item.sortOrder() : i;
             normalized.add(new ProfileServiceDto(
                     id, sortOrder, title, description, basePriceCents, resolvedDeadline, tasks,
                     specialty, pricingType, coverImageUrl, status, tags,
-                    currency, deliveryValue, deliveryUnit));
+                    currency, deliveryValue, deliveryUnit, billingPeriod));
         }
         normalized.sort((a, b) -> Integer.compare(a.sortOrder(), b.sortOrder()));
         return List.copyOf(normalized);
@@ -984,6 +986,20 @@ public final class ProfileExtensionsSupport {
                     "Currency code must be 1–8 alphanumeric characters.");
         }
         return code;
+    }
+
+    static String normalizeBillingPeriod(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String key = raw.trim().toUpperCase(Locale.ROOT);
+        return switch (key) {
+            case "DAY", "DAILY", "JOUR" -> "DAY";
+            case "MONTH", "MONTHLY", "MOIS" -> "MONTH";
+            case "YEAR", "YEARLY", "ANNUAL", "AN" -> "YEAR";
+            default -> throw new BusinessException("SERVICE_BILLING_PERIOD_INVALID",
+                    "Billing period must be day, month or year.");
+        };
     }
 
     static String normalizeDeliveryUnit(String raw) {

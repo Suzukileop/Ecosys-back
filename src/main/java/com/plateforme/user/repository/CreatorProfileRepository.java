@@ -26,8 +26,6 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             """)
     Optional<CreatorProfile> findByUserIdAndUserDeletedAtIsNull(@Param("userId") UUID userId);
 
-    Page<CreatorProfile> findBySpecialiteContainingIgnoreCaseAndUser_DeletedAtIsNull(String specialite, Pageable pageable);
-
     /**
      * Keyword search with weighted relevance (specialties/tags first).
      * :qCanonical / :qExpanded / :specialiteAlt / :specialiteSignals may be '' when unused.

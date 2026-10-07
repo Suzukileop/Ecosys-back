@@ -1,5 +1,6 @@
 package com.plateforme.auth.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.plateforme.auth.config.OAuthProperties;
 import com.plateforme.auth.dto.AuthResponse;
@@ -184,7 +185,7 @@ public class OAuthService {
         try {
             String pendingCode = oauthStateService.storePendingProfile(objectMapper.writeValueAsString(profile));
             return frontendUrl + "/oauth/complete?code=" + urlEncode(pendingCode);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new BusinessException("OAUTH_PENDING_ERROR", "Unable to start registration");
         }
     }
@@ -221,7 +222,7 @@ public class OAuthService {
         try {
             String exchangeCode = oauthStateService.storeExchangePayload(objectMapper.writeValueAsString(authResponse));
             return frontendUrl + "/oauth/callback?code=" + urlEncode(exchangeCode);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new BusinessException("OAUTH_EXCHANGE_ERROR", "Unable to finalize OAuth login");
         }
     }

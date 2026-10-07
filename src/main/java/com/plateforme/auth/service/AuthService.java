@@ -4,7 +4,7 @@ import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.security.JwtUtils;
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.UserDto;
 import com.plateforme.user.entity.CreatorProfile;
@@ -135,10 +135,8 @@ public class AuthService {
     @Transactional
     public void logout(String refreshTokenValue, String accessTokenJti, long accessTokenRemainingMs) {
         refreshTokenRepository.findByToken(refreshTokenValue).ifPresent(token -> {
-            token.setIsRevoked(true);
-            token.setRevokedAt(LocalDateTime.now());
-            refreshTokenRepository.save(token);
-            log.info("Refresh token révoqué pour l'utilisateur: {}", token.getUser().getId());
+            refreshTokenRepository.delete(token);
+            log.info("Refresh token supprimé à la déconnexion pour l'utilisateur: {}", token.getUser().getId());
         });
 
         if (accessTokenJti != null && accessTokenRemainingMs > 0) {

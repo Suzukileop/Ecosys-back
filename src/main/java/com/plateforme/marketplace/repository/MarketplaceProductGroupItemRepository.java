@@ -13,8 +13,6 @@ import java.util.UUID;
 @Repository
 public interface MarketplaceProductGroupItemRepository extends JpaRepository<MarketplaceProductGroupItem, UUID> {
 
-    List<MarketplaceProductGroupItem> findByProductGroup_IdOrderBySortOrderAsc(UUID groupId);
-
     List<MarketplaceProductGroupItem> findByProductGroup_IdAndProduct_DeletedAtIsNullOrderBySortOrderAsc(UUID groupId);
 
     List<MarketplaceProductGroupItem> findByProductGroup_IdAndProduct_DeletedAtIsNullAndProduct_IsPublishedTrueOrderBySortOrderAsc(

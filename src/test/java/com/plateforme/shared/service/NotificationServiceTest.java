@@ -1,6 +1,6 @@
 package com.plateforme.shared.service;
 
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.dto.NotificationDto;
 import com.plateforme.shared.entity.Notification;
 import com.plateforme.shared.exception.BusinessException;

@@ -6,6 +6,7 @@ import com.plateforme.auth.dto.OAuthExchangeRequest;
 import com.plateforme.auth.dto.OAuthPendingProfileResponse;
 import com.plateforme.auth.service.OAuthService;
 import com.plateforme.shared.exception.BusinessException;
+import com.plateforme.shared.exception.ServiceUnavailableException;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,8 @@ import java.util.Map;
 @Slf4j
 public class OAuthController {
 
+    private static final String TEMPORARILY_UNAVAILABLE = "temporarily_unavailable";
+
     private final OAuthService oauthService;
 
     @GetMapping("/status")
@@ -35,7 +38,12 @@ public class OAuthController {
             @RequestParam(defaultValue = "CREATOR") String role,
             HttpServletResponse response
     ) throws IOException {
-        response.sendRedirect(oauthService.buildGoogleAuthorizationUrl(signup, role));
+        try {
+            response.sendRedirect(oauthService.buildGoogleAuthorizationUrl(signup, role));
+        } catch (ServiceUnavailableException ex) {
+            log.warn("Google OAuth unavailable: {}", ex.getMessage());
+            response.sendRedirect(oauthService.buildErrorRedirect(TEMPORARILY_UNAVAILABLE));
+        }
     }
 
     @GetMapping("/google/callback")
@@ -54,6 +62,9 @@ public class OAuthController {
         } catch (BusinessException ex) {
             log.warn("Google OAuth failed: {}", ex.getMessage());
             response.sendRedirect(oauthService.buildErrorRedirect(ex.getMessage()));
+        } catch (ServiceUnavailableException ex) {
+            log.warn("Google OAuth unavailable: {}", ex.getMessage());
+            response.sendRedirect(oauthService.buildErrorRedirect(TEMPORARILY_UNAVAILABLE));
         }
     }
 

@@ -1,7 +1,7 @@
 package com.plateforme.marketplace.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.user.repository.CreatorFollowRepository;

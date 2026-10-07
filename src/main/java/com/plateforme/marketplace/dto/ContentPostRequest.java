@@ -19,6 +19,10 @@ public record ContentPostRequest(
         @Size(max = 20)
         String mediaType,
 
+        /** Ordered images of a multi-image post (max 10); the first one becomes the cover. */
+        @Size(max = 10)
+        List<@Size(max = 500) String> mediaUrls,
+
         @Pattern(regexp = "^#[0-9A-Fa-f]{6}$", message = "Invalid hex color")
         @Size(max = 20)
         String textColor,

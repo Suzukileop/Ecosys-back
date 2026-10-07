@@ -6,6 +6,7 @@ import com.plateforme.marketplace.dto.ContentPostResponse;
 import com.plateforme.marketplace.dto.ContentPostCommentsRequest;
 import com.plateforme.marketplace.dto.ContentPostVisibilityRequest;
 import com.plateforme.marketplace.dto.MinimalUserDto;
+import com.plateforme.marketplace.dto.RepostRequest;
 import com.plateforme.marketplace.service.ContentPostService;
 import com.plateforme.shared.dto.PagedResponse;
 import com.plateforme.user.entity.User;
@@ -64,6 +65,28 @@ public class ContentPostController {
         Pageable pageable = PageRequest.of(page, size);
         ContentPostBucket resolved = ContentPostBucket.fromParam(bucket);
         return ResponseEntity.ok(PagedResponse.fromPage(contentPostService.getMyPosts(creatorId, resolved, pageable)));
+    }
+
+    @Operation(summary = "Republier un contenu public")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Republication créée"),
+            @ApiResponse(responseCode = "400", description = "Déjà republié ou contenu personnel"),
+            @ApiResponse(responseCode = "404", description = "Contenu introuvable")
+    })
+    @PostMapping("/reposts")
+    @PreAuthorize("hasRole('CREATOR')")
+    public ResponseEntity<ContentPostResponse> repost(@Valid @RequestBody RepostRequest request) {
+        ContentPostResponse body = contentPostService.repostPost(
+                getCurrentUserId(), request.postId(), request.comment());
+        return ResponseEntity.status(HttpStatus.CREATED).body(body);
+    }
+
+    @Operation(summary = "Annuler ma republication d'un contenu")
+    @DeleteMapping("/reposts/{postId}")
+    @PreAuthorize("hasRole('CREATOR')")
+    public ResponseEntity<Void> undoRepost(@PathVariable UUID postId) {
+        contentPostService.undoRepost(getCurrentUserId(), postId);
+        return ResponseEntity.noContent().build();
     }
 
     @Operation(summary = "Obtenir un de mes contenus")

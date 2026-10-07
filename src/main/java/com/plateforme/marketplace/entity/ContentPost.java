@@ -39,8 +39,20 @@ public class ContentPost {
     @Column(name = "media_url", length = 500)
     private String mediaUrl;
 
+    /** Ordered gallery for multi-image posts; {@code mediaUrl} mirrors its first entry. Empty otherwise. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "media_urls", columnDefinition = "jsonb", nullable = false)
+    private List<String> mediaUrls = new ArrayList<>();
+
     @Column(name = "media_type", nullable = false, length = 20)
     private String mediaType = "FILE";
+
+    /**
+     * Original post when this one is a repost. A plain id rather than an association: the original may
+     * be soft-deleted, which a lazy association would turn into an {@code EntityNotFoundException}.
+     */
+    @Column(name = "repost_of_id")
+    private UUID repostOfId;
 
     @Column(name = "text_color", length = 20)
     private String textColor;
@@ -107,6 +119,9 @@ public class ContentPost {
         }
         if (taggedUserIds == null) {
             taggedUserIds = new ArrayList<>();
+        }
+        if (mediaUrls == null) {
+            mediaUrls = new ArrayList<>();
         }
         if (mediaType == null || mediaType.isBlank()) {
             mediaType = "FILE";

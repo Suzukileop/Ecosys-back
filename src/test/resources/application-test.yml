@@ -32,17 +32,3 @@ server:
 
 scheduling:
   enabled: false
-
-deepseek:
-  api-url: https://api.deepseek.com/chat/completions
-  api-key: test-deepseek-key
-  model: deepseek-chat
-  max-tokens: 500
-  temperature: 0.7
-  stub-without-key: false
-
-vpi:
-  client-id: vpi_test_client
-  client-secret: vpi_test_secret
-  key-secret: vpi_test_key
-  environment: PREPROD

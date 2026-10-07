@@ -21,8 +21,6 @@ public interface MarketplaceProductReviewRepository extends JpaRepository<Market
     Optional<MarketplaceProductReview> findFirstByProduct_IdAndUser_IdOrderByCreatedAtDesc(
             UUID productId, UUID userId);
 
-    long countByProduct_Id(UUID productId);
-
     long countByUser_IdAndProduct_IdAndCreatedAtGreaterThanEqual(
             UUID userId, UUID productId, LocalDateTime createdAt);
 

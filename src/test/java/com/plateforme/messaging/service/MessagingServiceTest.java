@@ -1,6 +1,6 @@
 package com.plateforme.messaging.service;
 
-import com.plateforme.ecosystem.storage.StorageService;
+import com.plateforme.shared.storage.StorageService;
 import com.plateforme.messaging.dto.CallSessionDto;
 import com.plateforme.messaging.dto.ConversationSummaryDto;
 import com.plateforme.messaging.dto.DirectMessageDto;
@@ -240,7 +240,7 @@ class MessagingServiceTest {
         ConversationParticipant selfParticipant = participant(user, conversation);
         ConversationParticipant otherParticipant = participant(otherUser, conversation);
 
-        when(conversationRepository.findAllForUserOrderByUpdatedAtDesc(userId))
+        when(conversationRepository.findRecentForUser(eq(userId), any()))
                 .thenReturn(List.of(conversation));
         when(participantGuard.isParticipantActive(any())).thenAnswer(inv -> {
             ConversationParticipant p = inv.getArgument(0);

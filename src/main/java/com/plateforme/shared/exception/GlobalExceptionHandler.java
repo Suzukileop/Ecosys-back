@@ -4,6 +4,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -15,8 +16,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
-
-import com.plateforme.credits.exception.InsufficientCreditsException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -90,15 +90,6 @@ public class GlobalExceptionHandler {
                 .body(buildError(HttpStatus.UNAUTHORIZED, "Unauthorized", "Your session has expired. Please sign in again.", request));
     }
 
-    @ExceptionHandler(InsufficientCreditsException.class)
-    public ResponseEntity<ErrorResponse> handleInsufficientCredits(
-            InsufficientCreditsException ex, HttpServletRequest request) {
-        log.warn("Crédits insuffisants: requis={} disponible={}", ex.getRequired(), ex.getAvailable());
-        return ResponseEntity.status(HttpStatus.PAYMENT_REQUIRED)
-                .body(buildError(HttpStatus.PAYMENT_REQUIRED, "INSUFFICIENT_CREDITS",
-                        "You don't have enough credits for this action.", request));
-    }
-
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(
             BusinessException ex, HttpServletRequest request) {
@@ -131,6 +122,15 @@ public class GlobalExceptionHandler {
                         "This service is temporarily unavailable. Please try again later.", request));
     }
 
+    @ExceptionHandler(RedisConnectionFailureException.class)
+    public ResponseEntity<ErrorResponse> handleRedisConnectionFailure(
+            RedisConnectionFailureException ex, HttpServletRequest request) {
+        log.error("Redis injoignable sur {}: {}", request.getRequestURI(), rootMessage(ex));
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(buildError(HttpStatus.SERVICE_UNAVAILABLE, "Service Unavailable",
+                        "This service is temporarily unavailable. Please try again later.", request));
+    }
+
     /**
      * Client closed the connection while the body was still being read
      * (navigation, HMR reload, aborted fetch). Not a server fault — avoid ERROR spam.
@@ -142,6 +142,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Void> handleClientAbort(Exception ex, HttpServletRequest request) {
         log.debug("Client aborted request {}: {}", request.getRequestURI(), ex.toString());
         return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT).build();
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResourceFound(
+            NoResourceFoundException ex, HttpServletRequest request) {
+        log.debug("Route inconnue: {}", request.getRequestURI());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(buildError(HttpStatus.NOT_FOUND, "Not Found", "This resource does not exist.", request));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

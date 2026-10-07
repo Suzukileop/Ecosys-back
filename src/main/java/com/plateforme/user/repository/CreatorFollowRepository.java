@@ -22,8 +22,6 @@ public interface CreatorFollowRepository extends JpaRepository<CreatorFollow, UU
 
     long countByCreator_Id(UUID creatorId);
 
-    long countByFollower_Id(UUID followerId);
-
     Page<CreatorFollow> findByFollower_IdOrderByCreatedAtDesc(UUID followerId, Pageable pageable);
 
     Page<CreatorFollow> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);

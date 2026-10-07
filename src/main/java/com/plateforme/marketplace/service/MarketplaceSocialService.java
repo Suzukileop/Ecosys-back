@@ -27,6 +27,9 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MarketplaceSocialService {
 
+    private static final int MAX_SCOPED_TARGET_IDS = 200;
+    private static final int MAX_UNSCOPED_TARGET_IDS = 1000;
+
     private final ContentReactionRepository reactionRepository;
     private final ContentFavoriteRepository favoriteRepository;
     private final ContentCommentRepository commentRepository;
@@ -103,15 +106,34 @@ public class MarketplaceSocialService {
         return new ReactionCountsResponse(targetType, targetId, likes, dislikes, userReaction, favorited);
     }
 
+    /**
+     * With {@code targetIds}, answers only for those (the items on screen). Without, returns the most
+     * recent ones, capped so the response cannot grow with the account's age.
+     */
     @Transactional(readOnly = true)
-    public java.util.List<UUID> getMyFavoriteTargetIds(UUID userId, ContentTargetType targetType) {
-        return favoriteRepository.findTargetIdsByUser_IdAndTargetType(userId, targetType);
+    public java.util.List<UUID> getMyFavoriteTargetIds(
+            UUID userId, ContentTargetType targetType, java.util.List<UUID> targetIds) {
+        if (targetIds != null && !targetIds.isEmpty()) {
+            return favoriteRepository.findTargetIdsAmong(userId, targetType, capTargetIds(targetIds));
+        }
+        return favoriteRepository.findRecentTargetIds(
+                userId, targetType, org.springframework.data.domain.PageRequest.of(0, MAX_UNSCOPED_TARGET_IDS));
     }
 
     @Transactional(readOnly = true)
-    public java.util.List<UUID> getMyLikedTargetIds(UUID userId, ContentTargetType targetType) {
-        return reactionRepository.findTargetIdsByUser_IdAndTargetTypeAndType(
-                userId, targetType, ReactionType.LIKE);
+    public java.util.List<UUID> getMyLikedTargetIds(
+            UUID userId, ContentTargetType targetType, java.util.List<UUID> targetIds) {
+        if (targetIds != null && !targetIds.isEmpty()) {
+            return reactionRepository.findTargetIdsAmong(
+                    userId, targetType, ReactionType.LIKE, capTargetIds(targetIds));
+        }
+        return reactionRepository.findRecentTargetIds(
+                userId, targetType, ReactionType.LIKE,
+                org.springframework.data.domain.PageRequest.of(0, MAX_UNSCOPED_TARGET_IDS));
+    }
+
+    private static java.util.List<UUID> capTargetIds(java.util.List<UUID> targetIds) {
+        return targetIds.size() > MAX_SCOPED_TARGET_IDS ? targetIds.subList(0, MAX_SCOPED_TARGET_IDS) : targetIds;
     }
 
     @Transactional

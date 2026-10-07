@@ -1,12 +1,16 @@
 package com.plateforme.auth.service;
 
+import com.plateforme.shared.exception.ServiceUnavailableException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 @Service
 @RequiredArgsConstructor
@@ -33,18 +37,12 @@ public class OAuthStateService {
         if (state == null || state.isBlank()) {
             return Optional.empty();
         }
-        String key = stateKey(state);
-        String value = redisTemplate.opsForValue().get(key);
-        if (value != null) {
-            redisTemplate.delete(key);
-            return Optional.of(value);
-        }
-        return Optional.empty();
+        return Optional.ofNullable(getAndDelete(stateKey(state)));
     }
 
     public String storeExchangePayload(String payload) {
         String code = UUID.randomUUID().toString();
-        redisTemplate.opsForValue().set(exchangeKey(code), payload, EXCHANGE_TTL);
+        set(exchangeKey(code), payload, EXCHANGE_TTL);
         return code;
     }
 
@@ -52,19 +50,17 @@ public class OAuthStateService {
         if (code == null || code.isBlank()) {
             return Optional.empty();
         }
-        String key = exchangeKey(code);
-        String payload = redisTemplate.opsForValue().get(key);
+        String payload = getAndDelete(exchangeKey(code));
         if (payload != null) {
-            redisTemplate.delete(key);
-            redisTemplate.opsForValue().set(exchangeReplayKey(code), payload, EXCHANGE_REPLAY_TTL);
+            set(exchangeReplayKey(code), payload, EXCHANGE_REPLAY_TTL);
             return Optional.of(payload);
         }
-        return Optional.ofNullable(redisTemplate.opsForValue().get(exchangeReplayKey(code)));
+        return Optional.ofNullable(get(exchangeReplayKey(code)));
     }
 
     public String storePendingProfile(String payload) {
         String code = UUID.randomUUID().toString();
-        redisTemplate.opsForValue().set(pendingKey(code), payload, PENDING_TTL);
+        set(pendingKey(code), payload, PENDING_TTL);
         return code;
     }
 
@@ -72,26 +68,49 @@ public class OAuthStateService {
         if (code == null || code.isBlank()) {
             return Optional.empty();
         }
-        String key = pendingKey(code);
-        String payload = redisTemplate.opsForValue().get(key);
-        if (payload != null) {
-            redisTemplate.delete(key);
-            return Optional.of(payload);
-        }
-        return Optional.empty();
+        return Optional.ofNullable(getAndDelete(pendingKey(code)));
     }
 
     public Optional<String> peekPendingProfile(String code) {
         if (code == null || code.isBlank()) {
             return Optional.empty();
         }
-        return Optional.ofNullable(redisTemplate.opsForValue().get(pendingKey(code)));
+        return Optional.ofNullable(get(pendingKey(code)));
     }
 
     private String createStateValue(String value) {
         String state = UUID.randomUUID().toString();
-        redisTemplate.opsForValue().set(stateKey(state), value, STATE_TTL);
+        set(stateKey(state), value, STATE_TTL);
         return state;
+    }
+
+    private String get(String key) {
+        return withRedis(() -> redisTemplate.opsForValue().get(key));
+    }
+
+    private String getAndDelete(String key) {
+        return withRedis(() -> {
+            String value = redisTemplate.opsForValue().get(key);
+            if (value != null) {
+                redisTemplate.delete(key);
+            }
+            return value;
+        });
+    }
+
+    private void set(String key, String value, Duration ttl) {
+        withRedis(() -> {
+            redisTemplate.opsForValue().set(key, value, ttl);
+            return null;
+        });
+    }
+
+    private static <T> T withRedis(Supplier<T> operation) {
+        try {
+            return operation.get();
+        } catch (DataAccessResourceFailureException | QueryTimeoutException ex) {
+            throw new ServiceUnavailableException("OAuth state store (Redis) is unreachable", ex);
+        }
     }
 
     private String stateKey(String state) {

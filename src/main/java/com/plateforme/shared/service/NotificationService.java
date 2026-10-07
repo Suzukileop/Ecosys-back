@@ -1,6 +1,6 @@
 package com.plateforme.shared.service;
 
-import com.plateforme.ecosystem.storage.PublicMediaUrlResolver;
+import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.dto.NotificationDto;
 import com.plateforme.shared.entity.Notification;
 import com.plateforme.shared.exception.BusinessException;
@@ -159,15 +159,6 @@ public class NotificationService {
             notificationRepository.save(notification);
         }
         log.debug("Bulk notification type={} role={} recipients={}", type, roleName, users.size());
-    }
-
-    @Transactional
-    public void notifyAgentOrAll(UUID assignedAgentId, String type, String title, String message, UUID refId) {
-        if (assignedAgentId != null) {
-            createAndSend(assignedAgentId, type, title, message, "PLATFORM", refId);
-            return;
-        }
-        sendBulkToRole("ROLE_AGENT", type, title, message, refId);
     }
 
     @Transactional(readOnly = true)

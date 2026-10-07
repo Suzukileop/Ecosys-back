@@ -20,6 +20,8 @@ import java.util.Locale;
  * check fails the boot on a production profile and warns loudly everywhere else, rather than
  * failing everywhere — a developer running {@code mvn spring-boot:run} with no profile set must
  * still get a working server.
+ *
+ * <p>The database password gets the same treatment: its fallback is committed too.
  */
 @Component
 @Slf4j
@@ -36,11 +38,18 @@ public class JwtSecretGuard {
 
     private final Environment environment;
 
+    /** Must match the fallback in application.yml. */
+    private static final String KNOWN_DEFAULT_DB_PASSWORD = "Pgsql_2025!Eco_Secure#X9";
+
     @Value("${app.jwt.secret:}")
     private String jwtSecret;
 
+    @Value("${spring.datasource.password:}")
+    private String dbPassword;
+
     @PostConstruct
     void verify() {
+        verifyDatabasePassword();
         String secret = jwtSecret == null ? "" : jwtSecret.trim();
         boolean isDefault = KNOWN_DEFAULT_SECRET.equals(secret);
         boolean tooShort = secret.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_BYTES;
@@ -61,6 +70,18 @@ public class JwtSecretGuard {
         }
         log.warn("SECURITY: {} — anyone with this repository can forge a token for any account. "
                 + "Set JWT_SECRET before exposing this instance (including through a tunnel).", reason);
+    }
+
+    private void verifyDatabasePassword() {
+        if (!KNOWN_DEFAULT_DB_PASSWORD.equals(dbPassword)) {
+            return;
+        }
+        String reason = "spring.datasource.password is still the default committed in the repository";
+        if (isProductionProfile()) {
+            throw new IllegalStateException(reason + ". Set the DB_PASSWORD environment variable before starting a "
+                    + Arrays.toString(environment.getActiveProfiles()) + " instance.");
+        }
+        log.warn("SECURITY: {} — set DB_PASSWORD before deploying.", reason);
     }
 
     private boolean isProductionProfile() {

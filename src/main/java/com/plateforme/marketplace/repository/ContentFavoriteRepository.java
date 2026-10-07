@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,9 +22,23 @@ public interface ContentFavoriteRepository extends JpaRepository<ContentFavorite
 
     Page<ContentFavorite> findByUser_IdOrderByCreatedAtDesc(UUID userId, Pageable pageable);
 
-    @Query("SELECT f.targetId FROM ContentFavorite f WHERE f.user.id = :userId AND f.targetType = :targetType")
-    List<UUID> findTargetIdsByUser_IdAndTargetType(
-            @Param("userId") UUID userId, @Param("targetType") ContentTargetType targetType);
+    /** Which of {@code targetIds} the user has favorited. */
+    @Query("""
+            SELECT f.targetId FROM ContentFavorite f
+            WHERE f.user.id = :userId AND f.targetType = :targetType AND f.targetId IN :targetIds
+            """)
+    List<UUID> findTargetIdsAmong(
+            @Param("userId") UUID userId,
+            @Param("targetType") ContentTargetType targetType,
+            @Param("targetIds") Collection<UUID> targetIds);
+
+    @Query("""
+            SELECT f.targetId FROM ContentFavorite f
+            WHERE f.user.id = :userId AND f.targetType = :targetType
+            ORDER BY f.createdAt DESC
+            """)
+    List<UUID> findRecentTargetIds(
+            @Param("userId") UUID userId, @Param("targetType") ContentTargetType targetType, Pageable pageable);
 
     long countByTargetTypeAndTargetId(ContentTargetType targetType, UUID targetId);
 }

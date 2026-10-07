@@ -1,6 +1,6 @@
 package com.plateforme.user.service;
 
-import com.plateforme.ecosystem.storage.StorageService;
+import com.plateforme.shared.storage.StorageService;
 import com.plateforme.marketplace.service.MarketplaceProductReviewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +11,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -19,7 +18,7 @@ import java.util.UUID;
  * Erases what a deleted account leaves behind, beyond the anonymised {@code users} row.
  *
  * <p>Kept on purpose: messages sent to other people (they belong to the recipients' conversations too),
- * purchase records and paid Agent requests (accounting), and audit logs (security). Native SQL is used
+ * purchase records (accounting), and audit logs (security). Native SQL is used
  * because several entities carry {@code @SQLRestriction("deleted_at IS NULL")} and would hide trashed rows.
  */
 @Service
@@ -28,7 +27,6 @@ import java.util.UUID;
 public class AccountErasureService {
 
     private static final String DELETED_NAME = "Deleted user";
-    private static final String RETAINED_PAYMENT_STATUSES = "('PAID', 'REFUNDED')";
 
     private final JdbcTemplate jdbc;
     private final StorageService storageService;
@@ -36,7 +34,6 @@ public class AccountErasureService {
 
     @Transactional(propagation = Propagation.MANDATORY)
     public void erase(UUID userId, String formerFullName) {
-        List<UUID> agentRequestIds = ids("SELECT id FROM niche_requests WHERE client_id = ?", userId);
         List<UUID> reviewedProductIds = ids(
                 "SELECT DISTINCT product_id FROM marketplace_product_reviews WHERE user_id = ?", userId);
         List<UUID> votedReviewIds = ids(
@@ -48,10 +45,9 @@ public class AccountErasureService {
         eraseProfileAndGraph(userId);
         eraseAccountData(userId);
         scrubConversations(userId, formerFullName);
-        eraseAgentData(userId);
 
-        scheduleFileDeletion(userId, agentRequestIds);
-        log.info("Account data erased user={} agentRequests={}", userId, agentRequestIds.size());
+        scheduleFileDeletion(userId);
+        log.info("Account data erased user={}", userId);
     }
 
     /** Likes, dislikes and favourites the user left on other people's posts and products. */
@@ -122,7 +118,6 @@ public class AccountErasureService {
         reviewedProductIds.forEach(reviewService::refreshProductRating);
 
         jdbc.update("DELETE FROM marketplace_product_views WHERE user_id = ?", userId);
-        jdbc.update("DELETE FROM content_access_logs WHERE user_id = ?", userId);
     }
 
     private void eraseProfileAndGraph(UUID userId) {
@@ -138,8 +133,6 @@ public class AccountErasureService {
 
     private void eraseAccountData(UUID userId) {
         jdbc.update("DELETE FROM user_settings WHERE user_id = ?", userId);
-        jdbc.update("DELETE FROM credit_transactions WHERE user_id = ?", userId);
-        jdbc.update("DELETE FROM user_credits WHERE user_id = ?", userId);
         /* ref_secondary_id holds the actor on other people's notifications ("X followed you"). */
         jdbc.update("DELETE FROM notifications WHERE user_id = ? OR ref_secondary_id = ?", userId, userId);
     }
@@ -157,39 +150,13 @@ public class AccountErasureService {
                 formerFullName.trim(), DELETED_NAME, userId);
     }
 
-    /** The Agent brief and bot chat; paid requests keep only their payment trail. */
-    private void eraseAgentData(UUID userId) {
-        jdbc.update("""
-                DELETE FROM chat_messages
-                WHERE sender_id = ? OR niche_request_id IN (SELECT id FROM niche_requests WHERE client_id = ?)""",
-                userId, userId);
-        jdbc.update("DELETE FROM scheduled_posts WHERE client_id = ?", userId);
-        jdbc.update("DELETE FROM scheduled_configs WHERE client_id = ?", userId);
-        jdbc.update("DELETE FROM service_requests WHERE client_id = ?", userId);
-        jdbc.update("""
-                UPDATE niche_requests SET
-                    niche_theme = '[deleted]', description = '', ref_mct_code = NULL, ref_external_url = NULL,
-                    ref_file_url = NULL, demo_content_url = NULL, model_video_url = NULL, agent_notes = NULL,
-                    rejection_reason = NULL, deleted_at = COALESCE(deleted_at, now())
-                WHERE client_id = ? AND payment_status IN %s""".formatted(RETAINED_PAYMENT_STATUSES), userId);
-        jdbc.update("""
-                DELETE FROM niche_requests
-                WHERE client_id = ? AND (payment_status IS NULL OR payment_status NOT IN %s)"""
-                .formatted(RETAINED_PAYMENT_STATUSES), userId);
-    }
-
     /** Files go only once the database changes are committed, so a rollback never loses media. */
-    private void scheduleFileDeletion(UUID userId, List<UUID> agentRequestIds) {
-        List<String> prefixes = new ArrayList<>(List.of(
+    private void scheduleFileDeletion(UUID userId) {
+        List<String> prefixes = List.of(
                 "profiles/public/" + userId + "/",
                 "content/public/" + userId + "/",
                 "content/public/experience/" + userId + "/",
-                "marketplace/public/" + userId + "/"));
-        for (UUID requestId : agentRequestIds) {
-            prefixes.add("demos/" + requestId + "/");
-            prefixes.add("niche-deliveries/" + requestId + "/");
-            prefixes.add("models/" + requestId + "/");
-        }
+                "marketplace/public/" + userId + "/");
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {

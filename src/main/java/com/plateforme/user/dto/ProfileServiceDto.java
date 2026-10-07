@@ -1,8 +1,11 @@
 package com.plateforme.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.util.List;
 import java.util.UUID;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ProfileServiceDto(
         UUID id,
         int sortOrder,
@@ -24,7 +27,9 @@ public record ProfileServiceDto(
         /** Structured delivery quantity (paired with deliveryUnit). */
         Integer deliveryValue,
         /** DAYS | WEEKS */
-        String deliveryUnit
+        String deliveryUnit,
+        /** Optional price period: DAY | MONTH | YEAR. Only kept for priced services. */
+        String billingPeriod
 ) {
     /** Backward-compatible constructor for legacy call sites / tests. */
     public ProfileServiceDto(
@@ -36,7 +41,7 @@ public record ProfileServiceDto(
             String deadline,
             List<String> tasks) {
         this(id, sortOrder, title, description, basePriceCents, deadline, tasks,
-                null, null, null, null, List.of(), "MGA", null, null);
+                null, null, null, null, List.of(), "MGA", null, null, null);
     }
 
     /** Backward-compatible constructor used before currency/delivery fields. */
@@ -54,6 +59,6 @@ public record ProfileServiceDto(
             String status,
             List<String> tags) {
         this(id, sortOrder, title, description, basePriceCents, deadline, tasks,
-                specialty, pricingType, coverImageUrl, status, tags, "MGA", null, null);
+                specialty, pricingType, coverImageUrl, status, tags, "MGA", null, null, null);
     }
 }

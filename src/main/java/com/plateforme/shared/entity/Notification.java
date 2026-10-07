@@ -51,7 +51,7 @@ public class Notification {
     @Column(name = "ref_id")
     private UUID refId;
 
-    /** Entité liée secondaire (ex. scheduled_post.id pour CONTENT_DELIVERED). */
+    /** Entité liée secondaire (contexte complémentaire à refId). */
     @Column(name = "ref_secondary_id")
     private UUID refSecondaryId;
 

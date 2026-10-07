@@ -1,7 +1,7 @@
 package com.plateforme.messaging.service;
 
-import com.plateforme.ecosystem.storage.StorageObjectKeys;
-import com.plateforme.ecosystem.storage.StorageService;
+import com.plateforme.shared.storage.StorageObjectKeys;
+import com.plateforme.shared.storage.StorageService;
 import com.plateforme.messaging.dto.AttachmentAccessDto;
 import com.plateforme.messaging.dto.CallSessionDto;
 import com.plateforme.messaging.dto.ConversationGuestDto;
@@ -45,6 +45,8 @@ import java.util.stream.Collectors;
 public class MessagingService {
 
     private static final int ATTACHMENT_URL_EXPIRY_MINUTES = 15;
+    /** The inbox lists the most recently active conversations, so its payload cannot grow unbounded. */
+    private static final int MAX_INBOX_CONVERSATIONS = 500;
     private static final long MAX_ATTACHMENT_BYTES = 50L * 1024 * 1024;
     private static final long MAX_GROUP_COVER_BYTES = 5L * 1024 * 1024;
 
@@ -179,7 +181,8 @@ public class MessagingService {
 
     @Transactional(readOnly = true)
     public List<ConversationSummaryDto> listConversationsForUser(UUID userId, boolean archivedOnly) {
-        List<Conversation> conversations = conversationRepository.findAllForUserOrderByUpdatedAtDesc(userId);
+        List<Conversation> conversations = conversationRepository.findRecentForUser(
+                userId, PageRequest.of(0, MAX_INBOX_CONVERSATIONS));
         if (conversations.isEmpty()) {
             return List.of();
         }
@@ -1411,7 +1414,7 @@ public class MessagingService {
         return new ConversationInviteDto(
                 invite.getId(),
                 invite.getToken(),
-                "/dashboard/discussions/join?token=" + invite.getToken(),
+                "/messages/join?token=" + invite.getToken(),
                 invite.getExpiresAt(),
                 invite.getMaxUses(),
                 invite.getUseCount()

@@ -203,6 +203,23 @@ public class MarketplaceController {
                 creatorId, genre, q, pageable, resolveViewerUserId(authentication))));
     }
 
+    @Operation(summary = "Contenus enregistrés par l'utilisateur connecté")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Liste paginée (vide si non connecté)")
+    })
+    @GetMapping("/contents/saved")
+    public ResponseEntity<PagedResponse<ContentPostResponse>> getSavedContents(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            Authentication authentication) {
+        Pageable pageable = PageRequest.of(page, Math.min(Math.max(size, 1), 50));
+        UUID viewerId = resolveViewerUserId(authentication);
+        if (viewerId == null) {
+            return ResponseEntity.ok(PagedResponse.fromPage(Page.empty(pageable)));
+        }
+        return ResponseEntity.ok(PagedResponse.fromPage(contentPostService.getSavedPosts(viewerId, pageable)));
+    }
+
     @Operation(summary = "Détail d'un contenu public")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Contenu trouvé"),

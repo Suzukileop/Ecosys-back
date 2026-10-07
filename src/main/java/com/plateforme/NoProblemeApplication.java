@@ -1,7 +1,6 @@
 package com.plateforme;
 
-import com.plateforme.ecosystem.config.DeepSeekProperties;
-import com.plateforme.ecosystem.config.R2StorageProperties;
+import com.plateforme.shared.config.R2StorageProperties;
 import com.plateforme.shared.ratelimit.RateLimitProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -15,7 +14,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableScheduling
 @EnableAsync
 @EnableConfigurationProperties({
-        DeepSeekProperties.class,
         R2StorageProperties.class,
         RateLimitProperties.class
 })

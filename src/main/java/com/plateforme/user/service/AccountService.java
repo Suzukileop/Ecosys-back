@@ -153,11 +153,6 @@ public class AccountService {
         out.put("activity", activity);
 
         out.put("purchases", exportRows("SELECT * FROM marketplace_purchases WHERE buyer_id = ?", userId));
-        Map<String, Object> credits = new LinkedHashMap<>();
-        credits.put("balance", exportRow("SELECT * FROM user_credits WHERE user_id = ?", userId));
-        credits.put("transactions", exportRows("SELECT * FROM credit_transactions WHERE user_id = ?", userId));
-        out.put("credits", credits);
-
         Map<String, Object> messaging = new LinkedHashMap<>();
         messaging.put("messagesSent", exportRows("""
                 SELECT id, conversation_id, message_type, content, sent_at FROM direct_messages
@@ -167,16 +162,6 @@ public class AccountService {
                 WHERE m.sender_id = ?""", "object_key", userId));
         messaging.put("callsStarted", exportRows("SELECT * FROM call_sessions WHERE initiator_id = ?", userId));
         out.put("messaging", messaging);
-
-        Map<String, Object> agent = new LinkedHashMap<>();
-        agent.put("requests", exportRows("SELECT * FROM niche_requests WHERE client_id = ?", userId));
-        agent.put("assistantChat", exportRows("""
-                SELECT room_id, sender_type, content, sent_at FROM chat_messages
-                WHERE sender_id = ? OR niche_request_id IN (SELECT id FROM niche_requests WHERE client_id = ?)
-                ORDER BY sent_at""", userId, userId));
-        agent.put("serviceRequests", exportRows("SELECT * FROM service_requests WHERE client_id = ?", userId));
-        agent.put("scheduledPosts", exportRows("SELECT * FROM scheduled_posts WHERE client_id = ?", userId));
-        out.put("agentService", agent);
 
         out.put("notifications", exportRows("SELECT * FROM notifications WHERE user_id = ?", userId));
         return out;

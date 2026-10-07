@@ -7,6 +7,14 @@ spring:
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-init-sql: SET client_encoding TO 'UTF8'
+      # Size to the target: roughly Postgres max_connections divided by the number of instances.
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: ${DB_POOL_CONNECTION_TIMEOUT_MS:30000}
+      idle-timeout: ${DB_POOL_IDLE_TIMEOUT_MS:600000}
+      max-lifetime: ${DB_POOL_MAX_LIFETIME_MS:1800000}
+      # Logs a stack trace when a connection is held longer than this (0 = off).
+      leak-detection-threshold: ${DB_POOL_LEAK_DETECTION_MS:0}
   jpa:
     open-in-view: false
     hibernate:
@@ -53,10 +61,6 @@ app:
     from: ${MAIL_FROM:}
   landing:
     feedback-email: ${LANDING_FEEDBACK_EMAIL:leopardjuliocesar8@gmail.com}
-  # true sans clés VPI : checkout écosystème simulé (activation sans paiement réel). Défaut false.
-  payment:
-    simulate-without-vpi: ${PAYMENT_SIMULATE_WITHOUT_VPI:${PAYMENT_SIMULATE_WITHOUT_STRIPE:false}}
-  backend-public-url: ${BACKEND_PUBLIC_URL:http://localhost:8080}
   jwt:
     secret: ${JWT_SECRET:dev-secret-key-minimum-256-bits-change-in-production}
     expiration: 900000
@@ -71,7 +75,7 @@ app:
       redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8080/api/auth/oauth/google/callback}
   storage:
     local-dir: ${STORAGE_LOCAL_DIR:./build/storage-uploads}
-    # Base URL utilisée pour construire demoContentUrl / refFileUrl en mode local (voir LocalDevStorageService)
+    # Base URL des médias servis en mode local (voir LocalDevStorageService)
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080}
   r2:
     # true = uploads vers Cloudflare R2 (sinon fichiers locaux + /api/storage)
@@ -105,39 +109,8 @@ server:
 scheduling:
   enabled: true
 
-# DeepSeek : utiliser DEEPSEEK_API_KEY en prod, ou le profil Spring "local"
-# (voir application-local.yml — fichier ignoré par Git, voir README).
-deepseek:
-  api-url: https://api.deepseek.com/chat/completions
-  api-key: ${DEEPSEEK_API_KEY:}
-  model: deepseek-chat
-  max-tokens: 500
-  temperature: 0.7
-  # true = réponses de secours si pas de clé (uniquement dev / démo, pas la vraie IA)
-  stub-without-key: false
-
-vpi:
-  client-id: ${VPI_CLIENT_ID:}
-  client-secret: ${VPI_CLIENT_SECRET:}
-  key-secret: ${VPI_KEY_SECRET:}
-  environment: ${VPI_ENV:PREPROD}
-  payment-method: ${VPI_PAYMENT_METHOD:mobile_money}
-  currency: ${VPI_CURRENCY:MGA}
-  eur-to-mga-rate: ${VPI_EUR_TO_MGA_RATE:4920}
-
 springdoc:
   api-docs:
     path: /api-docs
   swagger-ui:
     path: /swagger-ui.html
-
----
-# Profil local : sans clés VPI, le checkout écosystème est simulé.
-# Désactiver : PAYMENT_SIMULATE_WITHOUT_VPI=false
-spring:
-  config:
-    activate:
-      on-profile: local
-app:
-  payment:
-    simulate-without-vpi: ${PAYMENT_SIMULATE_WITHOUT_VPI:${PAYMENT_SIMULATE_WITHOUT_STRIPE:true}}

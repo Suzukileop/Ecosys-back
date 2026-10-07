@@ -2,6 +2,7 @@ package com.plateforme.marketplace.controller;
 
 import com.plateforme.marketplace.dto.*;
 import com.plateforme.marketplace.entity.ContentTargetType;
+import com.plateforme.marketplace.service.ContentPostService;
 import com.plateforme.marketplace.service.MarketplaceSocialService;
 import com.plateforme.shared.dto.PagedResponse;
 import com.plateforme.user.entity.User;
@@ -32,6 +33,7 @@ import java.util.UUID;
 public class MarketplaceSocialController {
 
     private final MarketplaceSocialService socialService;
+    private final ContentPostService contentPostService;
 
     @Operation(summary = "Add or update reaction")
     @ApiResponses({
@@ -74,8 +76,9 @@ public class MarketplaceSocialController {
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/social/reactions/me/ids")
     public ResponseEntity<java.util.List<UUID>> getMyLikedTargetIds(
-            @RequestParam ContentTargetType targetType) {
-        return ResponseEntity.ok(socialService.getMyLikedTargetIds(getCurrentUserId(), targetType));
+            @RequestParam ContentTargetType targetType,
+            @RequestParam(required = false) java.util.List<UUID> targetIds) {
+        return ResponseEntity.ok(socialService.getMyLikedTargetIds(getCurrentUserId(), targetType, targetIds));
     }
 
     @Operation(summary = "Add favorite")
@@ -101,8 +104,9 @@ public class MarketplaceSocialController {
     @PreAuthorize("isAuthenticated()")
     @GetMapping("/favorites/me/ids")
     public ResponseEntity<java.util.List<UUID>> getMyFavoriteTargetIds(
-            @RequestParam ContentTargetType targetType) {
-        return ResponseEntity.ok(socialService.getMyFavoriteTargetIds(getCurrentUserId(), targetType));
+            @RequestParam ContentTargetType targetType,
+            @RequestParam(required = false) java.util.List<UUID> targetIds) {
+        return ResponseEntity.ok(socialService.getMyFavoriteTargetIds(getCurrentUserId(), targetType, targetIds));
     }
 
     @Operation(summary = "List my favorites")
@@ -176,6 +180,22 @@ public class MarketplaceSocialController {
     @PostMapping("/social/shares")
     public ResponseEntity<Void> recordShare(@Valid @RequestBody ShareRequest request) {
         socialService.recordShare(getCurrentUserId(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Hide a post from my feed (not interested)")
+    @SecurityRequirement(name = "bearerAuth")
+    @PostMapping("/social/hidden-posts/{postId}")
+    public ResponseEntity<Void> hidePost(@PathVariable UUID postId) {
+        contentPostService.hidePost(getCurrentUserId(), postId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @Operation(summary = "Show a hidden post in my feed again")
+    @SecurityRequirement(name = "bearerAuth")
+    @DeleteMapping("/social/hidden-posts/{postId}")
+    public ResponseEntity<Void> unhidePost(@PathVariable UUID postId) {
+        contentPostService.unhidePost(getCurrentUserId(), postId);
         return ResponseEntity.noContent().build();
     }
 

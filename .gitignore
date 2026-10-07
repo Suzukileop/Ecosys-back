@@ -10,9 +10,6 @@ target/
 # Stockage local runtime (uploads, médias générés)
 build/
 
-# Remotion / Chrome headless (binaires locaux, jamais versionnés)
-.remotion/
-
 # IDE / OS
 .idea/
 *.iml

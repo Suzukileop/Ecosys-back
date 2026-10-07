@@ -1,8 +1,8 @@
 package com.plateforme.user.service;
 
 import com.plateforme.auth.service.AuthService;
-import com.plateforme.ecosystem.storage.StorageObjectKeys;
-import com.plateforme.ecosystem.storage.StorageService;
+import com.plateforme.shared.storage.StorageObjectKeys;
+import com.plateforme.shared.storage.StorageService;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.UpdateUserProfileDto;
 import com.plateforme.user.dto.UserDto;

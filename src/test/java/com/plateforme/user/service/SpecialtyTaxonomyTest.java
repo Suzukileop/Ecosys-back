@@ -16,12 +16,20 @@ class SpecialtyTaxonomyTest {
     }
 
     @Test
-    void normalizeSpecialties_keepsFreeTextAndCapsAtThree() {
+    void normalizeSpecialties_keepsFreeTextAndPutsPrimaryFirst() {
         List<String> result = SpecialtyTaxonomy.normalizeSpecialties(
                 List.of("Motion Designer", "DevOps Engineer", "Web Developer", "Music"),
                 "DevOps Engineer");
         // "DevOps Engineer" canonicalizes to Popular label "DevOps"
-        assertThat(result).containsExactly("DevOps", "Motion Designer", "Web Developer");
+        assertThat(result).containsExactly("DevOps", "Motion Designer", "Web Developer", "Music");
+    }
+
+    @Test
+    void normalizeSpecialties_capsAtMax() {
+        List<String> raw = java.util.stream.IntStream.range(0, SpecialtyTaxonomy.MAX_SPECIALTIES + 5)
+                .mapToObj(i -> "Skill " + i)
+                .toList();
+        assertThat(SpecialtyTaxonomy.normalizeSpecialties(raw, null)).hasSize(SpecialtyTaxonomy.MAX_SPECIALTIES);
     }
 
     @Test

@@ -1,7 +1,7 @@
 package com.plateforme.marketplace.controller;
 
-import com.plateforme.ecosystem.storage.StorageObjectKeys;
-import com.plateforme.ecosystem.storage.StorageService;
+import com.plateforme.shared.storage.StorageObjectKeys;
+import com.plateforme.shared.storage.StorageService;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;

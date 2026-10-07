@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,15 +58,6 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
 
     Page<ContentPost> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
 
-    @Query("""
-            SELECT cp FROM ContentPost cp
-            WHERE cp.creator.id = :creatorId
-            AND cp.isPublic = true
-            AND cp.archivedAt IS NULL
-            ORDER BY cp.pinnedAt DESC NULLS LAST, cp.createdAt DESC
-            """)
-    Page<ContentPost> findByCreator_IdAndIsPublicTrueOrderByCreatedAtDesc(UUID creatorId, Pageable pageable);
-
     Optional<ContentPost> findByIdAndIsPublicTrue(UUID id);
 
     @Query("""
@@ -86,8 +78,6 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
     long countByCreator_Id(UUID creatorId);
 
     List<ContentPost> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId);
-
-    long countByCreator_IdAndIsPublicTrue(UUID creatorId);
 
     /**
      * Public feed search — same keyword pipeline as the creator search ({@code CreatorSearchExpand}):
@@ -117,6 +107,15 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
             AND cp.archived_at IS NULL
             AND (CAST(:creatorId AS UUID) IS NULL OR cp.creator_id = CAST(:creatorId AS UUID))
             AND (CAST(:genre AS VARCHAR) IS NULL OR cp.genre = CAST(:genre AS VARCHAR))
+            AND (cp.repost_of_id IS NULL OR EXISTS (
+                SELECT 1 FROM content_posts orig
+                WHERE orig.id = cp.repost_of_id
+                AND orig.deleted_at IS NULL AND orig.is_public = true AND orig.archived_at IS NULL
+            ))
+            AND (CAST(:viewerId AS UUID) IS NULL OR CAST(:creatorId AS UUID) IS NOT NULL OR NOT EXISTS (
+                SELECT 1 FROM content_post_hides h
+                WHERE h.user_id = CAST(:viewerId AS UUID) AND h.post_id = cp.id
+            ))
             AND (
                 CAST(:terms AS VARCHAR) = ''
                 OR EXISTS (
@@ -182,6 +181,15 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
             AND cp.archived_at IS NULL
             AND (CAST(:creatorId AS UUID) IS NULL OR cp.creator_id = CAST(:creatorId AS UUID))
             AND (CAST(:genre AS VARCHAR) IS NULL OR cp.genre = CAST(:genre AS VARCHAR))
+            AND (cp.repost_of_id IS NULL OR EXISTS (
+                SELECT 1 FROM content_posts orig
+                WHERE orig.id = cp.repost_of_id
+                AND orig.deleted_at IS NULL AND orig.is_public = true AND orig.archived_at IS NULL
+            ))
+            AND (CAST(:viewerId AS UUID) IS NULL OR CAST(:creatorId AS UUID) IS NOT NULL OR NOT EXISTS (
+                SELECT 1 FROM content_post_hides h
+                WHERE h.user_id = CAST(:viewerId AS UUID) AND h.post_id = cp.id
+            ))
             AND (
                 CAST(:terms AS VARCHAR) = ''
                 OR EXISTS (
@@ -200,6 +208,7 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
             nativeQuery = true)
     Page<ContentPost> findPublicFiltered(
             @Param("creatorId") UUID creatorId,
+            @Param("viewerId") UUID viewerId,
             @Param("genre") String genre,
             @Param("q") String q,
             @Param("qCanonical") String qCanonical,
@@ -240,4 +249,38 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
             WHERE id = :postId AND creator_id = :creatorId AND deleted_at IS NOT NULL
             """, nativeQuery = true)
     Optional<ContentPost> findTrashById(@Param("creatorId") UUID creatorId, @Param("postId") UUID postId);
+
+    /** Live (not trashed) reposts per original: rows of {@code [originalId, count]}. */
+    @Query("""
+            SELECT cp.repostOfId, COUNT(cp) FROM ContentPost cp
+            WHERE cp.repostOfId IN :originalIds
+            GROUP BY cp.repostOfId
+            """)
+    List<Object[]> countRepostsByOriginalIds(@Param("originalIds") Collection<UUID> originalIds);
+
+    /** Which of {@code originalIds} the creator has already reposted. */
+    @Query("""
+            SELECT cp.repostOfId FROM ContentPost cp
+            WHERE cp.creator.id = :creatorId AND cp.repostOfId IN :originalIds
+            """)
+    List<UUID> findRepostedOriginalIds(
+            @Param("creatorId") UUID creatorId, @Param("originalIds") Collection<UUID> originalIds);
+
+    Optional<ContentPost> findFirstByCreator_IdAndRepostOfId(UUID creatorId, UUID repostOfId);
+
+    long countByRepostOfId(UUID repostOfId);
+
+    /** Public posts the user saved, most recently saved first. */
+    @Query(value = """
+            SELECT cp FROM ContentPost cp, ContentFavorite f
+            WHERE f.user.id = :userId AND f.targetType = com.plateforme.marketplace.entity.ContentTargetType.POST
+            AND f.targetId = cp.id AND cp.isPublic = true AND cp.archivedAt IS NULL
+            ORDER BY f.createdAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(cp) FROM ContentPost cp, ContentFavorite f
+            WHERE f.user.id = :userId AND f.targetType = com.plateforme.marketplace.entity.ContentTargetType.POST
+            AND f.targetId = cp.id AND cp.isPublic = true AND cp.archivedAt IS NULL
+            """)
+    Page<ContentPost> findSavedByUserId(@Param("userId") UUID userId, Pageable pageable);
 }

@@ -71,9 +71,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/social/reactions/counts").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/social/comments").permitAll()
-                        /** Fichiers démo/refs servis par URL (img/video n'envoient pas le JWT) */
+                        /** Médias servis par URL (img/video n'envoient pas le JWT) */
                         .requestMatchers(HttpMethod.GET, "/api/storage/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/payments/webhook/vpi").permitAll()
                         .requestMatchers(
                                 "/api/auth/signup",
                                 "/api/auth/login",
@@ -86,16 +85,10 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/ws/**"
                         ).permitAll()
-                        .requestMatchers("/api/chat/**").authenticated()
                         .requestMatchers("/api/messaging/**").authenticated()
                         .requestMatchers("/api/presence/**").authenticated()
-                        .requestMatchers("/api/ecosystem/**").authenticated()
-                        .requestMatchers("/api/agent/**").authenticated()
                         .requestMatchers("/api/notifications/**").authenticated()
                         .requestMatchers("/api/creator/**").authenticated()
-                        .requestMatchers("/api/credits/**").authenticated()
-                        .requestMatchers("/api/scheduler/**").authenticated()
-                        .requestMatchers("/api/analytics/**").authenticated()
                         .requestMatchers("/api/admin/**").authenticated()
                         .anyRequest().authenticated()
                 )
