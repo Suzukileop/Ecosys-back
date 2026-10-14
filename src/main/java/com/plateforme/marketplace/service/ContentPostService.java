@@ -295,8 +295,12 @@ public class ContentPostService {
             }
         }
 
-        Page<ContentPost> page = contentPostRepository.findPublicFiltered(
-                creatorId, viewerId, g, q != null ? q : "", qCanonical, terms, pageable);
+        /* A keyword search across everyone is ranked (relevance × engagement × freshness, one author
+           never filling the page); the feed and a profile's own list keep their pinned / newest order. */
+        Page<ContentPost> page = q != null && creatorId == null
+                ? contentPostRepository.searchPublicRanked(viewerId, g, q, qCanonical, terms, pageable)
+                : contentPostRepository.findPublicFiltered(
+                        creatorId, viewerId, g, q != null ? q : "", qCanonical, terms, pageable);
         return enrichPage(page, viewerId);
     }
 
@@ -304,6 +308,12 @@ public class ContentPostService {
     @Transactional(readOnly = true)
     public Page<ContentPostResponse> getSavedPosts(UUID viewerId, Pageable pageable) {
         return enrichPage(contentPostRepository.findSavedByUserId(viewerId, pageable), viewerId);
+    }
+
+    /** Posts of one of the viewer's saved collections (ownership is checked by the caller). */
+    @Transactional(readOnly = true)
+    public Page<ContentPostResponse> getSavedCollectionPosts(UUID viewerId, UUID collectionId, Pageable pageable) {
+        return enrichPage(contentPostRepository.findInSavedCollection(collectionId, pageable), viewerId);
     }
 
     /**
@@ -523,7 +533,6 @@ public class ContentPostService {
                 specialite,
                 specialties
         );
-        List<String> tools = post.getToolsUsed() != null ? post.getToolsUsed() : List.of();
         List<String> tags = post.getTags() != null ? post.getTags() : List.of();
         List<MinimalUserDto> taggedUsers = resolveTaggedUsers(post.getTaggedUserIds());
 
@@ -539,7 +548,6 @@ public class ContentPostService {
                 taggedUsers,
                 post.getDescription(),
                 post.getPriceInfo(),
-                tools,
                 tags,
                 Boolean.TRUE.equals(post.getIsPublic()),
                 Boolean.TRUE.equals(post.getCommentsEnabled()),
@@ -595,10 +603,6 @@ public class ContentPostService {
             throw new BusinessException("CONTENT_EMPTY", "Write something or add a media file.");
         }
 
-        if (countStringListItems(req.toolsUsed()) > MAX_LIST_ITEMS) {
-            throw new BusinessException("TOOLS_USED_LIMIT", "A maximum of 10 tools is allowed.");
-        }
-
         if (countStringListItems(req.tags()) > MAX_LIST_ITEMS) {
             throw new BusinessException("TAGS_LIMIT", "Maximum 10 tags allowed");
         }
@@ -638,7 +642,6 @@ public class ContentPostService {
     }
 
     private void applyRequest(ContentPost post, ContentPostRequest req, List<UUID> taggedIds) {
-        List<String> tools = normalizeStringList(req.toolsUsed());
         List<String> tags = normalizeStringList(req.tags());
         String mediaUrl = req.mediaUrl() != null && !req.mediaUrl().isBlank() ? req.mediaUrl().trim() : null;
         String mediaType = normalizeMediaType(req.mediaType());
@@ -674,7 +677,6 @@ public class ContentPostService {
         post.setTaggedUserIds(new ArrayList<>(taggedIds));
         post.setDescription(blankToNull(req.description()));
         post.setPriceInfo(blankToNull(req.priceInfo()));
-        post.setToolsUsed(new ArrayList<>(tools));
         post.setTags(new ArrayList<>(tags));
         post.setIsPublic(Boolean.TRUE.equals(req.isPublic()));
         if (req.commentsEnabled() != null) {

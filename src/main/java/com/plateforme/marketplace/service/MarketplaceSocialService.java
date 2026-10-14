@@ -32,6 +32,7 @@ public class MarketplaceSocialService {
 
     private final ContentReactionRepository reactionRepository;
     private final ContentFavoriteRepository favoriteRepository;
+    private final SavedCollectionItemRepository savedCollectionItemRepository;
     private final ContentCommentRepository commentRepository;
     private final ContentReportRepository reportRepository;
     private final ContentShareRepository shareRepository;
@@ -165,6 +166,10 @@ public class MarketplaceSocialService {
         favoriteRepository.delete(existing.get());
         if (targetType == ContentTargetType.PRODUCT) {
             adjustProductCounter(targetId, "favorites", -1);
+        }
+        if (targetType == ContentTargetType.POST) {
+            // Collections only hold saved posts: un-saving takes the post out of all of them.
+            savedCollectionItemRepository.deleteForUserAndPost(userId, targetId);
         }
         log.info("Favorite removed user={} target={}/{}", userId, targetType, targetId);
     }

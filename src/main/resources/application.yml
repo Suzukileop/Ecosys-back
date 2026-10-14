@@ -54,11 +54,16 @@ rate-limit:
   auth-refresh: 120              # Augmenté : plusieurs onglets/fenêtres légitimes en parallèle
   auth-login: 5
   auth-signup: 3
+  auth-verify-email: 10          # Essais de code par minute et par IP (5 essais max par code en plus)
+  auth-resend-verification: 3
 
 app:
   # Expéditeur vérifié chez le fournisseur SMTP (Brevo, etc.). Si vide, spring.mail.username est utilisé.
   mail:
     from: ${MAIL_FROM:}
+    # Sans SMTP configuré, écrit le contenu des e-mails (dont les codes de vérification) dans les logs.
+    # Développement local uniquement : à laisser à false partout ailleurs.
+    log-body: ${MAIL_LOG_BODY:false}
   landing:
     feedback-email: ${LANDING_FEEDBACK_EMAIL:leopardjuliocesar8@gmail.com}
   jwt:

@@ -78,6 +78,7 @@ public class CreatorProfileService {
             String label = dto.availabilityLabel().trim();
             profile.setAvailabilityLabel(label.isEmpty() ? null : label);
         }
+        applyHourlyRate(profile, dto);
         if (dto.contactVisibility() != null) profile.setContactVisibility(dto.contactVisibility());
         if (dto.studioHeaderLayout() != null) profile.setStudioHeaderLayout(dto.studioHeaderLayout());
         if (dto.studioHeaderContentStyle() != null) profile.setStudioHeaderContentStyle(dto.studioHeaderContentStyle());
@@ -106,6 +107,12 @@ public class CreatorProfileService {
         if (dto.experienceBlocks() != null) {
             profile.setExperienceBlocks(new ArrayList<>(
                     ProfileStoryFieldsSupport.normalizeBlocks(dto.experienceBlocks(), userId)));
+        }
+        // Years of experience is its own field: the About details and the single-field edit send it
+        // without the experience blocks. It used to be written only alongside the blocks, so those
+        // updates answered 200 and dropped the value. A full experience save (blocks present) still
+        // writes it even when null, which is how that form clears it.
+        if (dto.experienceBlocks() != null || dto.yearsOfExperience() != null) {
             profile.setYearsOfExperience(
                     ProfileStoryFieldsSupport.normalizeYears(dto.yearsOfExperience()));
         }
@@ -289,6 +296,21 @@ public class CreatorProfileService {
         }
     }
 
+    /** null = untouched, 0 = cleared (rate and currency), positive = set with its currency. */
+    private static void applyHourlyRate(CreatorProfile profile, UpdateCreatorProfileDto dto) {
+        if (dto.hourlyRateCents() == null) {
+            return;
+        }
+        if (dto.hourlyRateCents() == 0) {
+            profile.setHourlyRateCents(null);
+            profile.setHourlyRateCurrency(null);
+            return;
+        }
+        profile.setHourlyRateCents(dto.hourlyRateCents());
+        profile.setHourlyRateCurrency(ProfileExtensionsSupport.normalizeServiceCurrency(
+                dto.hourlyRateCurrency() != null ? dto.hourlyRateCurrency() : profile.getHourlyRateCurrency()));
+    }
+
     private void applyProfileLinks(CreatorProfile profile, UpdateCreatorProfileDto dto, UUID userId) {
         if (dto.profileLinks() != null) {
             profile.setProfileLinks(new ArrayList<>(
@@ -434,7 +456,9 @@ public class CreatorProfileService {
                 user.getCreatedAt(),
                 responseLabel,
                 p.getTypicalResponseTime(),
-                p.getResponseTimeSampleCount()
+                p.getResponseTimeSampleCount(),
+                p.getHourlyRateCents(),
+                p.getHourlyRateCurrency()
         );
     }
 

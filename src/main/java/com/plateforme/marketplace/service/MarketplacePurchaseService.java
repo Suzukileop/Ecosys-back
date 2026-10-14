@@ -202,7 +202,8 @@ public class MarketplacePurchaseService {
                 purchase.getCurrency(),
                 product.getFileFormat(),
                 product.getGenre(),
-                product.getDeliveryMode()
+                product.getDeliveryMode(),
+                product.getTypeLabel()
         );
     }
 }

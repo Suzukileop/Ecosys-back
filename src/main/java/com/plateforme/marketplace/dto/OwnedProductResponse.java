@@ -21,5 +21,7 @@ public record OwnedProductResponse(
         String currency,
         String fileFormat,
         String genre,
-        DeliveryMode deliveryMode
+        DeliveryMode deliveryMode,
+        /** The creator's name for an {@code OTHER} type; null for every other type. */
+        String productTypeLabel
 ) {}

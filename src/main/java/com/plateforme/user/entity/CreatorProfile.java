@@ -182,6 +182,14 @@ public class CreatorProfile {
     @Column(name = "availability_label", length = 80)
     private String availabilityLabel;
 
+    /** Provider hourly rate in cents (null = not set). */
+    @Column(name = "hourly_rate_cents")
+    private Integer hourlyRateCents;
+
+    /** Currency code of {@link #hourlyRateCents}; null when no rate is set. */
+    @Column(name = "hourly_rate_currency", length = 8)
+    private String hourlyRateCurrency;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "contact_visibility", columnDefinition = "jsonb", nullable = false)
     private String contactVisibility = ContactVisibilitySettings.defaultJson();

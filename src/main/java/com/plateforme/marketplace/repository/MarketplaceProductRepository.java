@@ -57,6 +57,7 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
                 OR LOWER(COALESCE(p.description, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                 OR LOWER(CAST(p.tags AS string)) LIKE LOWER(CONCAT('%', :q, '%'))
                 OR LOWER(COALESCE(p.genre, '')) LIKE LOWER(CONCAT('%', :q, '%'))
+                OR LOWER(COALESCE(p.typeLabel, '')) LIKE LOWER(CONCAT('%', :q, '%'))
                 OR LOWER(COALESCE(p.specialite, '')) LIKE LOWER(CONCAT('%', :q, '%')))
             AND (:freeOnly = true AND p.priceCents = 0
                 OR :freeOnly = false

@@ -104,11 +104,17 @@ public class GlobalExceptionHandler {
     }
 
     private static HttpStatus resolveBusinessStatus(String code) {
-        if ("RATE_LIMIT_EXCEEDED".equals(code)) {
+        if ("RATE_LIMIT_EXCEEDED".equals(code) || "TOO_MANY_VERIFICATION_EMAILS".equals(code)) {
             return HttpStatus.TOO_MANY_REQUESTS;
         }
-        if ("CREATOR_NOT_FOUND".equals(code)) {
+        if ("EMAIL_NOT_VERIFIED".equals(code)) {
+            return HttpStatus.FORBIDDEN;
+        }
+        if ("CREATOR_NOT_FOUND".equals(code) || "COLLECTION_NOT_FOUND".equals(code)) {
             return HttpStatus.NOT_FOUND;
+        }
+        if ("COLLECTION_NAME_TAKEN".equals(code)) {
+            return HttpStatus.CONFLICT;
         }
         return HttpStatus.BAD_REQUEST;
     }

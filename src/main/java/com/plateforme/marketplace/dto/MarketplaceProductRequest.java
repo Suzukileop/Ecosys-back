@@ -84,7 +84,14 @@ public record MarketplaceProductRequest(
 
         @Min(0)
         @Max(1_000_000)
-        Integer stockQuantity
+        Integer stockQuantity,
+
+        /** {@code ProductStatusLabel} names; null keeps none. */
+        List<String> statusLabels,
+
+        /** Free name for an {@code OTHER} type; ignored for every other type. */
+        @Size(max = 60)
+        String typeLabel
 ) {
     public MarketplaceProductRequest {
         if (currency == null || currency.isBlank()) {
@@ -101,6 +108,9 @@ public record MarketplaceProductRequest(
         }
         if (galleryImageUrls == null) {
             galleryImageUrls = List.of();
+        }
+        if (statusLabels == null) {
+            statusLabels = List.of();
         }
     }
 }

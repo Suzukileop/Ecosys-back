@@ -167,5 +167,13 @@ public record UpdateCreatorProfileDto(
 
         @Pattern(regexp = "WITHIN_1_HOUR|FEW_HOURS|WITHIN_DAY|WITHIN_2_3_DAYS|")
         @Size(max = 40)
-        String typicalResponseTime
+        String typicalResponseTime,
+
+        /** Hourly rate in cents; 0 clears it, null leaves it unchanged. */
+        @Min(0)
+        @Max(100_000_000)
+        Integer hourlyRateCents,
+
+        @Size(max = 8)
+        String hourlyRateCurrency
 ) {}

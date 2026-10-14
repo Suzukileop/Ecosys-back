@@ -39,6 +39,8 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
     private final Map<String, Bucket> loginBuckets    = new ConcurrentHashMap<>();
     private final Map<String, Bucket> signupBuckets   = new ConcurrentHashMap<>();
     private final Map<String, Bucket> refreshBuckets  = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> verifyEmailBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> resendVerificationBuckets = new ConcurrentHashMap<>();
 
     // ── Marketplace buckets (keyed by userId or IP) ─────────────────────────
     private final Map<String, Bucket> mktPublicReadBuckets = new ConcurrentHashMap<>();
@@ -89,6 +91,14 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
         if (path.equals("/api/auth/signup")) {
             return new BucketEntry(clientIp,
                     signupBuckets.computeIfAbsent(clientIp, k -> bucket(props.authSignup())));
+        }
+        if (path.equals("/api/auth/verify-email")) {
+            return new BucketEntry(clientIp,
+                    verifyEmailBuckets.computeIfAbsent(clientIp, k -> bucket(props.authVerifyEmail())));
+        }
+        if (path.equals("/api/auth/verify-email/resend")) {
+            return new BucketEntry(clientIp,
+                    resendVerificationBuckets.computeIfAbsent(clientIp, k -> bucket(props.authResendVerification())));
         }
         if (path.equals("/api/auth/refresh")) {
             return new BucketEntry(clientIp,

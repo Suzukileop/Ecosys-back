@@ -74,10 +74,6 @@ public class ContentPost {
     private String priceInfo;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "tools_used", columnDefinition = "jsonb")
-    private List<String> toolsUsed = new ArrayList<>();
-
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb", nullable = false)
     private List<String> tags = new ArrayList<>();
 
@@ -111,9 +107,6 @@ public class ContentPost {
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
-        if (toolsUsed == null) {
-            toolsUsed = new ArrayList<>();
-        }
         if (tags == null) {
             tags = new ArrayList<>();
         }

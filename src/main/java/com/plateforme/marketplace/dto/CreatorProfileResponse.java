@@ -88,5 +88,8 @@ public record CreatorProfileResponse(
         String shopDescription,
         String shopCoverUrl,
         /** Distance from viewer when lat/lng are provided (km); null otherwise. */
-        Double distanceKm
+        Double distanceKm,
+        /** Provider hourly rate in cents; null when not set. */
+        Integer hourlyRateCents,
+        String hourlyRateCurrency
 ) {}

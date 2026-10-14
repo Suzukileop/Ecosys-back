@@ -61,24 +61,6 @@ class ContentPostServiceTest {
     }
 
     @Test
-    @DisplayName("createPost : plus de 10 outils → BusinessException")
-    void createPost_validatesToolsUsedMax10() {
-        when(userRepository.findByIdAndDeletedAtIsNull(creatorId)).thenReturn(Optional.of(creator));
-
-        List<String> tools = Collections.nCopies(11, "tool");
-
-        ContentPostRequest req = new ContentPostRequest(
-                "t", "g", "https://m.com/x", null, null, null, null, null, null, null, null, tools, null, true, true);
-
-        assertThatThrownBy(() -> contentPostService.createPost(creatorId, req))
-                .isInstanceOf(BusinessException.class)
-                .extracting("code")
-                .isEqualTo("TOOLS_USED_LIMIT");
-
-        verify(contentPostRepository, never()).save(any());
-    }
-
-    @Test
     @DisplayName("deletePost : soft delete avec deletedAt")
     void deletePost_softDelete() {
         UUID postId = UUID.randomUUID();
@@ -190,7 +172,7 @@ class ContentPostServiceTest {
                 "https://m.com/a.jpg", " https://m.com/b.jpg ", "https://m.com/c.jpg", "https://m.com/a.jpg");
         ContentPostRequest req = new ContentPostRequest(
                 null, null, "https://m.com/ignored.jpg", "GIF", urls,
-                null, null, null, null, null, null, null, null, true, true);
+                null, null, null, null, null, null, null, true, true);
 
         var resp = contentPostService.createPost(creatorId, req);
 
@@ -207,7 +189,7 @@ class ContentPostServiceTest {
         List<String> urls = java.util.stream.IntStream.range(0, 11)
                 .mapToObj(i -> "https://m.com/" + i + ".jpg").toList();
         ContentPostRequest req = new ContentPostRequest(
-                null, null, null, null, urls, null, null, null, null, null, null, null, null, true, true);
+                null, null, null, null, urls, null, null, null, null, null, null, null, true, true);
 
         assertThatThrownBy(() -> contentPostService.createPost(creatorId, req))
                 .isInstanceOf(BusinessException.class)
@@ -221,7 +203,7 @@ class ContentPostServiceTest {
         when(userRepository.findByIdAndDeletedAtIsNull(creatorId)).thenReturn(Optional.of(creator));
         ContentPostRequest req = new ContentPostRequest(
                 null, null, null, null, List.of("javascript:alert(1)"),
-                null, null, null, null, null, null, null, null, true, true);
+                null, null, null, null, null, null, null, true, true);
 
         assertThatThrownBy(() -> contentPostService.createPost(creatorId, req))
                 .isInstanceOf(BusinessException.class)

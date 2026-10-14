@@ -2,7 +2,11 @@ package com.plateforme.auth.controller;
 
 import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.LoginRequest;
+import com.plateforme.auth.dto.ResendVerificationRequest;
+import com.plateforme.auth.dto.ResendVerificationResponse;
 import com.plateforme.auth.dto.SignupRequest;
+import com.plateforme.auth.dto.SignupResponse;
+import com.plateforme.auth.dto.VerifyEmailRequest;
 import com.plateforme.auth.security.JwtUtils;
 import com.plateforme.auth.service.AuthService;
 import com.plateforme.shared.util.LogMasking;
@@ -35,17 +39,43 @@ public class AuthController {
     private final JwtUtils jwtUtils;
     private final PresenceService presenceService;
 
-    @Operation(summary = "Inscription", description = "Crée un nouveau compte utilisateur (CREATOR)")
+    @Operation(summary = "Inscription",
+            description = "Crée un compte CREATOR verrouillé et envoie un code de vérification par e-mail. "
+                    + "Aucune session n'est ouverte : elle commence à POST /api/auth/verify-email.")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Compte créé avec succès"),
+            @ApiResponse(responseCode = "201", description = "Compte créé, code envoyé"),
             @ApiResponse(responseCode = "400", description = "Données invalides ou email déjà utilisé"),
             @ApiResponse(responseCode = "429", description = "Trop de requêtes")
     })
     @PostMapping("/signup")
-    public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest request) {
+    public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         log.info("Tentative d'inscription pour: {}", LogMasking.email(request.email()));
-        AuthResponse response = authService.signup(request);
+        SignupResponse response = authService.signup(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "Vérifier l'e-mail",
+            description = "Valide le code à 6 chiffres reçu par e-mail, déverrouille le compte et ouvre la session")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "E-mail vérifié, tokens retournés"),
+            @ApiResponse(responseCode = "400", description = "Code incorrect, expiré ou trop d'essais"),
+            @ApiResponse(responseCode = "429", description = "Trop de requêtes")
+    })
+    @PostMapping("/verify-email")
+    public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        return ResponseEntity.ok(authService.verifyEmail(request));
+    }
+
+    @Operation(summary = "Renvoyer le code",
+            description = "Envoie un nouveau code si l'adresse a un compte non vérifié. Réponse identique dans tous les cas.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "202", description = "Demande prise en compte"),
+            @ApiResponse(responseCode = "429", description = "Trop de codes demandés")
+    })
+    @PostMapping("/verify-email/resend")
+    public ResponseEntity<ResendVerificationResponse> resendVerification(
+            @Valid @RequestBody ResendVerificationRequest request) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.resendVerification(request));
     }
 
     @Operation(summary = "Connexion", description = "Authentifie un utilisateur et retourne les tokens")

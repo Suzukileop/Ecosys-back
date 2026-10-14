@@ -41,8 +41,6 @@ public record ContentPostRequest(
         @Size(max = 200)
         String priceInfo,
 
-        List<String> toolsUsed,
-
         List<String> tags,
 
         Boolean isPublic,

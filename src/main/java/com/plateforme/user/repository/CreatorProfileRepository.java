@@ -167,6 +167,9 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
                  )
             )
             ORDER BY
+              CASE WHEN CAST(:sortKey AS VARCHAR) = 'rate' THEN cp.hourly_rate_cents END ASC NULLS LAST,
+              CASE WHEN CAST(:sortKey AS VARCHAR) = 'stars'
+                THEN (SELECT COUNT(*) FROM creator_stars cs WHERE cs.creator_id = cp.user_id) END DESC NULLS LAST,
               GREATEST(
                 CASE
                   WHEN EXISTS (
@@ -395,6 +398,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             @Param("specialiteAlt") String specialiteAlt,
             @Param("specialiteSignals") String specialiteSignals,
             @Param("minYearsExperience") Integer minYearsExperience,
+            @Param("sortKey") String sortKey,
             Pageable pageable);
 
     @Query(value = """
@@ -476,6 +480,9 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             AND (CAST(:minYearsExperience AS INTEGER) IS NULL
                  OR cp.years_of_experience >= CAST(:minYearsExperience AS INTEGER))
             ORDER BY
+              CASE WHEN CAST(:sortKey AS VARCHAR) = 'rate' THEN cp.hourly_rate_cents END ASC NULLS LAST,
+              CASE WHEN CAST(:sortKey AS VARCHAR) = 'stars'
+                THEN (SELECT COUNT(*) FROM creator_stars cs WHERE cs.creator_id = cp.user_id) END DESC NULLS LAST,
               CASE
                 WHEN CAST(:specialite AS VARCHAR) IS NULL OR CAST(:specialite AS VARCHAR) = '' THEN 0
                 WHEN EXISTS (
@@ -627,6 +634,7 @@ public interface CreatorProfileRepository extends JpaRepository<CreatorProfile, 
             @Param("available") Boolean available,
             @Param("nationality") String nationality,
             @Param("minYearsExperience") Integer minYearsExperience,
+            @Param("sortKey") String sortKey,
             Pageable pageable);
 
     @Query(value = """

@@ -38,6 +38,7 @@ import com.plateforme.user.service.ProfileExtensionsSupport;
 import com.plateforme.user.service.ProfileBioSupport;
 import com.plateforme.user.service.ProfileStoryFieldsSupport;
 import com.plateforme.user.service.SpecialtyTaxonomy;
+import com.plateforme.user.service.SpecialtyCatalog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -58,6 +59,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 @Slf4j
 public class MarketplaceService {
+
+    /** Autocomplete list length for the profile Specialty field. */
+    private static final int MAX_SPECIALTY_SUGGESTIONS = 30;
 
     private record ResolvedPublicContact(
             String websiteUrl,
@@ -122,7 +126,7 @@ public class MarketplaceService {
                         nationalityFilter, yearsFilter, lat, lng, pageable)
                 : creatorProfileRepository.findForMarketplace(
                         specialitePrimary, specialiteAlt, specialiteSignals, verified, available,
-                        nationalityFilter, yearsFilter, pageable);
+                        nationalityFilter, yearsFilter, listSortKey(sort), pageable);
         List<UUID> creatorIds = page.getContent().stream().map(p -> p.getUser().getId()).toList();
         Set<UUID> followedIds = creatorFollowService.getFollowedCreatorIds(viewerUserId, creatorIds);
         Map<UUID, Long> followerCounts = creatorFollowService.getFollowerCounts(creatorIds);
@@ -158,7 +162,7 @@ public class MarketplaceService {
                             nationalityFilter, yearsFilter, lat, lng, pageable)
                     : creatorProfileRepository.findForMarketplace(
                             specialitePrimary, specialiteAlt, specialiteSignals, verified, available,
-                            nationalityFilter, yearsFilter, pageable);
+                            nationalityFilter, yearsFilter, listSortKey(sort), pageable);
         } else {
             String q = keyword.trim();
             if (q.length() > SpecialtyTaxonomy.MAX_SPECIALTY_LENGTH) {
@@ -176,7 +180,8 @@ public class MarketplaceService {
             } else {
                 page = creatorProfileRepository.searchByBioOrSpecialite(
                         q, qCanonical, qExpanded, verified, available, nationalityFilter,
-                        specialitePrimary, specialiteAlt, specialiteSignals, yearsFilter, pageable);
+                        specialitePrimary, specialiteAlt, specialiteSignals, yearsFilter,
+                        listSortKey(sort), pageable);
             }
         }
 
@@ -224,12 +229,29 @@ public class MarketplaceService {
             }
         }
         List<String> values = new ArrayList<>(unique.values());
-        String rankQuery = query.toLowerCase(Locale.ROOT);
+        String rankKey = SpecialtyCatalog.key(query);
+        String rankCompact = rankKey.replaceAll("[^a-z0-9]+", "");
         values.sort(Comparator
-                .comparingInt((String label) -> specialtySuggestionRank(label, rankQuery))
+                .comparingInt((String label) -> specialtySuggestionRank(label, rankKey, rankCompact))
                 .thenComparing(label -> label.toLowerCase(Locale.ROOT)));
-        if (values.size() > 20) {
-            return List.copyOf(values.subList(0, 20));
+        if (!query.isBlank()) {
+            // Curated catalog fills the rest; aliases of Popular chips (e.g. "Graphic designer" → "Design")
+            // are skipped since saving them would collapse to the chip anyway.
+            for (String label : SpecialtyCatalog.search(query, MAX_SPECIALTY_SUGGESTIONS * 2)) {
+                String canonical = SpecialtyTaxonomy.canonicalize(label);
+                if (canonical != null && !canonical.equals(label)) {
+                    continue;
+                }
+                if (unique.putIfAbsent(label.toLowerCase(Locale.ROOT), label) == null) {
+                    values.add(label);
+                }
+            }
+            // Keep strong catalog matches (exact / prefix / word prefix) ahead of weak community matches.
+            values.sort(Comparator.comparingInt((String label) ->
+                    Math.min(specialtySuggestionRank(label, rankKey, rankCompact), 3)));
+        }
+        if (values.size() > MAX_SPECIALTY_SUGGESTIONS) {
+            return List.copyOf(values.subList(0, MAX_SPECIALTY_SUGGESTIONS));
         }
         return List.copyOf(values);
     }
@@ -429,7 +451,9 @@ public class MarketplaceService {
                 blankToNull(profile.getShopSellingFocus()),
                 blankToNull(profile.getShopDescription()),
                 blankToNull(profile.getShopCoverUrl()),
-                distanceKm
+                distanceKm,
+                profile.getHourlyRateCents(),
+                profile.getHourlyRateCents() != null ? profile.getHourlyRateCurrency() : null
         );
     }
 
@@ -461,18 +485,11 @@ public class MarketplaceService {
         return Math.min(minYearsExperience, 80);
     }
 
-    private static int specialtySuggestionRank(String label, String query) {
-        if (query == null || query.isBlank()) {
-            return 2;
+    private static int specialtySuggestionRank(String label, String queryKey, String compactQuery) {
+        if (queryKey == null || queryKey.isBlank()) {
+            return 4;
         }
-        String lower = label.toLowerCase(Locale.ROOT);
-        if (lower.equals(query)) {
-            return 0;
-        }
-        if (lower.startsWith(query)) {
-            return 1;
-        }
-        return 2;
+        return Math.min(SpecialtyCatalog.rank(label, queryKey, compactQuery), 4);
     }
 
     private static boolean hasViewerLocation(Double lat, Double lng) {
@@ -497,6 +514,22 @@ public class MarketplaceService {
             return false;
         }
         return accuracyM <= DISTANCE_MAX_ACCURACY_M;
+    }
+
+    /**
+     * Directory list order (non-distance): "rate" = lowest hourly rate first (providers without a rate
+     * last), "stars" = most trust stars first, anything else = "" (Recommended: relevance, verified,
+     * available, name). Rates are compared by amount only — mixed currencies are not converted.
+     */
+    static String listSortKey(String sort) {
+        if (sort == null) {
+            return "";
+        }
+        return switch (sort.trim().toLowerCase(Locale.ROOT)) {
+            case "rate", "rate_asc", "lowest_rate" -> "rate";
+            case "stars", "stars_desc", "most_stars" -> "stars";
+            default -> "";
+        };
     }
 
     private static boolean wantsDistanceSort(String sort, Double lat, Double lng) {
@@ -583,7 +616,6 @@ public class MarketplaceService {
                     List.of(),
                     work.description(),
                     work.link(),
-                    work.stack() != null ? work.stack() : List.of(),
                     List.of(),
                     true,
                     false,

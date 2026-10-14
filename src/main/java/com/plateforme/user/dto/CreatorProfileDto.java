@@ -69,5 +69,7 @@ public record CreatorProfileDto(
         LocalDateTime memberSince,
         String responseTimeLabel,
         String typicalResponseTime,
-        Integer responseTimeSampleCount
+        Integer responseTimeSampleCount,
+        Integer hourlyRateCents,
+        String hourlyRateCurrency
 ) {}

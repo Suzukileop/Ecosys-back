@@ -35,6 +35,10 @@ public class MarketplaceProduct {
     @Column(nullable = false, length = 30)
     private ProductType type;
 
+    /** The creator's own name for an {@code OTHER} type (e.g. "Notion workspace"); null otherwise. */
+    @Column(name = "type_label", length = 60)
+    private String typeLabel;
+
     @Column(nullable = false, length = 300)
     private String title;
 
@@ -107,6 +111,11 @@ public class MarketplaceProduct {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "gallery_image_urls", columnDefinition = "jsonb", nullable = false)
     private List<String> galleryImageUrls = new ArrayList<>();
+
+    /** {@link ProductStatusLabel} names (Promotion, Trending…) shown as badges on the cards. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "status_labels", columnDefinition = "jsonb", nullable = false)
+    private List<String> statusLabels = new ArrayList<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "bundle_id")
@@ -192,6 +201,9 @@ public class MarketplaceProduct {
         }
         if (galleryImageUrls == null) {
             galleryImageUrls = new ArrayList<>();
+        }
+        if (statusLabels == null) {
+            statusLabels = new ArrayList<>();
         }
     }
 

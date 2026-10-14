@@ -16,7 +16,6 @@ public record ContentPostResponse(
         List<MinimalUserDto> taggedUsers,
         String description,
         String priceInfo,
-        List<String> toolsUsed,
         List<String> tags,
         boolean isPublic,
         boolean commentsEnabled,
@@ -47,12 +46,12 @@ public record ContentPostResponse(
     public ContentPostResponse(
             UUID id, String title, String genre, String mediaUrl, String mediaType, String textColor,
             String moodLabel, String moodEmoji, List<MinimalUserDto> taggedUsers, String description,
-            String priceInfo, List<String> toolsUsed, List<String> tags, boolean isPublic,
+            String priceInfo, List<String> tags, boolean isPublic,
             boolean commentsEnabled, boolean pinned, LocalDateTime archivedAt, int views, int likes,
             long portfolioCount, LocalDateTime createdAt, MinimalUserDto creator, Long commentCount,
             String viewerReaction) {
         this(id, title, genre, mediaUrl, mediaType, textColor, moodLabel, moodEmoji, taggedUsers,
-                description, priceInfo, toolsUsed, tags, isPublic, commentsEnabled, pinned, archivedAt,
+                description, priceInfo, tags, isPublic, commentsEnabled, pinned, archivedAt,
                 views, likes, portfolioCount, createdAt, creator, commentCount, viewerReaction,
                 mediaUrl != null && !mediaUrl.isBlank() ? List.of(mediaUrl) : List.of(),
                 null, 0L, null, null);

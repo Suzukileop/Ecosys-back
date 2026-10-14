@@ -75,6 +75,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/storage/**").permitAll()
                         .requestMatchers(
                                 "/api/auth/signup",
+                                "/api/auth/verify-email",
+                                "/api/auth/verify-email/resend",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",

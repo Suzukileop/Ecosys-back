@@ -4,6 +4,7 @@ import com.plateforme.marketplace.dto.MarketplaceProductRequest;
 import com.plateforme.marketplace.dto.MarketplaceProductResponse;
 import com.plateforme.marketplace.entity.ContentTargetType;
 import com.plateforme.marketplace.entity.MarketplaceProduct;
+import com.plateforme.marketplace.entity.ProductStatusLabel;
 import com.plateforme.marketplace.entity.ProductType;
 import com.plateforme.marketplace.repository.MarketplaceProductGroupItemRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
@@ -429,6 +430,10 @@ public class MarketplaceProductService {
                 : List.of();
 
         product.setType(req.type());
+        /* Only an "Other" product carries its own type name. */
+        product.setTypeLabel(req.type() == ProductType.OTHER && req.typeLabel() != null && !req.typeLabel().isBlank()
+                ? req.typeLabel().trim()
+                : null);
         product.setTitle(req.title());
         product.setDescription(req.description());
         product.setPriceCents(req.priceCents());
@@ -458,6 +463,7 @@ public class MarketplaceProductService {
         product.setMaxDownloads(req.maxDownloads());
         product.setTags(new ArrayList<>(tags));
         product.setGalleryImageUrls(new ArrayList<>(galleryUrls));
+        product.setStatusLabels(new ArrayList<>(normalizeStatusLabels(req.statusLabels())));
         product.setCompareAtPriceCents(req.compareAtPriceCents());
         product.setVideoDurationSeconds(req.videoDurationSeconds());
         product.setVideoResolution(req.videoResolution());
@@ -468,6 +474,33 @@ public class MarketplaceProductService {
     }
 
     static final int MAX_HASHTAGS = 15;
+
+    /** A product shows at most this many status badges — more stops reading as a signal. */
+    static final int MAX_STATUS_LABELS = 3;
+
+    /**
+     * Upper-cased, de-duplicated {@link ProductStatusLabel} names in the creator's order. An unknown
+     * name is a client error (the picker only offers the enum), not something to drop silently.
+     */
+    static List<String> normalizeStatusLabels(List<String> raw) {
+        if (raw == null || raw.isEmpty()) return List.of();
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        for (String value : raw) {
+            if (value == null || value.isBlank()) continue;
+            String name = value.trim().toUpperCase(java.util.Locale.ROOT);
+            try {
+                ProductStatusLabel.valueOf(name);
+            } catch (IllegalArgumentException e) {
+                throw new BusinessException("INVALID_STATUS_LABEL", "Unknown product status: " + value);
+            }
+            out.add(name);
+        }
+        if (out.size() > MAX_STATUS_LABELS) {
+            throw new BusinessException("TOO_MANY_STATUS_LABELS",
+                    "A product can show at most " + MAX_STATUS_LABELS + " statuses.");
+        }
+        return List.copyOf(out);
+    }
     static final int MAX_HASHTAG_LENGTH = 40;
 
     /**
@@ -573,7 +606,9 @@ public class MarketplaceProductService {
                         : null,
                 !Boolean.FALSE.equals(product.getShowOnProfile()),
                 bestsellerRank,
-                rankings.catalogues(product.getId())
+                rankings.catalogues(product.getId()),
+                product.getStatusLabels() != null ? product.getStatusLabels() : List.of(),
+                product.getTypeLabel()
         );
     }
 

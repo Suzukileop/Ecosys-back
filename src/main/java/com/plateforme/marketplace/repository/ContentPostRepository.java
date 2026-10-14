@@ -82,7 +82,7 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
     /**
      * Public feed search — same keyword pipeline as the creator search ({@code CreatorSearchExpand}):
      * the raw query, its canonical specialty and expanded synonyms/tools are matched against the post
-     * and its author's profile (specialties, tags, tools, bio). 2–3 letter alphanumeric terms
+     * and its author's profile (specialties, tags, bio). 2–3 letter alphanumeric terms
      * ("ai", "ui", "3d") match whole words only, so "ai" does not hit "email" or "paint".
      * :q / :qCanonical / :terms are '' when unused.
      */
@@ -95,7 +95,6 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
                     LOWER(COALESCE(cp.title, '')) AS title,
                     LOWER(COALESCE(cp.genre, '')) AS genre,
                     LOWER(COALESCE(cp.tags::text, '')) AS tags,
-                    LOWER(COALESCE(cp.tools_used::text, '')) AS tools,
                     LOWER(CONCAT_WS(' ', cp.description, cp.mood_label, cp.price_info)) AS body,
                     LOWER(CONCAT_WS(' ', prof.specialite, prof.specialties::text, prof.specialty_tags::text,
                         prof.strengths_tools_mastered::text, prof.profile_services::text)) AS skills,
@@ -124,9 +123,9 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
                     AND (
                         CASE
                           WHEN LOWER(btrim(term)) ~ '^[a-z0-9]{2,3}$'
-                          THEN CONCAT_WS(' ', s.title, s.genre, s.tags, s.tools, s.body, s.skills, s.author)
+                          THEN CONCAT_WS(' ', s.title, s.genre, s.tags, s.body, s.skills, s.author)
                                ~ ('\\m' || LOWER(btrim(term)) || '\\M')
-                          ELSE CONCAT_WS(' ', s.title, s.genre, s.tags, s.tools, s.body, s.skills, s.author)
+                          ELSE CONCAT_WS(' ', s.title, s.genre, s.tags, s.body, s.skills, s.author)
                                LIKE CONCAT('%', LOWER(btrim(term)), '%')
                         END
                     )
@@ -146,7 +145,6 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
                   WHEN s.tags LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                     OR s.genre LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                   THEN 60
-                  WHEN s.tools LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%')) THEN 50
                   WHEN s.skills LIKE LOWER(CONCAT('%', CAST(:q AS VARCHAR), '%'))
                     OR (CAST(:qCanonical AS VARCHAR) <> ''
                         AND s.skills LIKE LOWER(CONCAT('%', CAST(:qCanonical AS VARCHAR), '%')))
@@ -168,7 +166,6 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
                     LOWER(COALESCE(cp.title, '')),
                     LOWER(COALESCE(cp.genre, '')),
                     LOWER(COALESCE(cp.tags::text, '')),
-                    LOWER(COALESCE(cp.tools_used::text, '')),
                     LOWER(CONCAT_WS(' ', cp.description, cp.mood_label, cp.price_info)),
                     LOWER(CONCAT_WS(' ', prof.specialite, prof.specialties::text, prof.specialty_tags::text,
                         prof.strengths_tools_mastered::text, prof.profile_services::text)),
@@ -229,6 +226,155 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
             """)
     Long sumLikesByCreatorId(@Param("creatorId") UUID creatorId);
 
+    /**
+     * The candidates of the ranked search and their relevance — shared by {@link #searchPublicRanked}
+     * and its count query. A post qualifies on its OWN text only (title, genre, tags, description):
+     * matching the author's name, shop or bio is not enough, since the people blocks already answer
+     * that — otherwise a name pulled in every post its owner ever wrote.
+     *
+     * Relevance, the best tier that applies:
+     *   100  a tag or the genre is exactly the query (or its canonical specialty)
+     *    80  the title contains the query
+     *    60  the tags / genre contain it
+     *    40  the description contains it
+     *  0–35  share of the query's words found in the post (multi-word queries, any order)
+     *    25  a synonym / related tool of the query is found (CreatorSearchExpand)
+     * 2–3 letter alphanumeric queries / words ("ai", "ui", "3d") match whole words only.
+     */
+    String RANKED_SEARCH_CANDIDATES = """
+            FROM content_posts p
+            INNER JOIN users u ON u.id = p.creator_id
+            LEFT JOIN creator_profiles prof ON prof.user_id = p.creator_id
+            CROSS JOIN LATERAL (
+                SELECT
+                    LOWER(TRIM(CAST(:q AS VARCHAR))) AS q,
+                    LOWER(TRIM(CAST(:qCanonical AS VARCHAR))) AS qc,
+                    LOWER(TRIM(CAST(:q AS VARCHAR))) ~ '^[a-z0-9]{2,3}$' AS short
+            ) qq
+            CROSS JOIN LATERAL (
+                SELECT
+                    LOWER(COALESCE(p.title, '')) AS title,
+                    LOWER(COALESCE(p.genre, '')) AS genre,
+                    LOWER(COALESCE(p.tags::text, '')) AS tags,
+                    LOWER(CONCAT_WS(' ', p.description, p.mood_label, p.price_info)) AS body,
+                    LOWER(CONCAT_WS(' ', p.title, p.genre, p.tags::text, p.description, p.mood_label, p.price_info)) AS own,
+                    LOWER(CONCAT_WS(' ', prof.specialite, prof.specialties::text, prof.specialty_tags::text,
+                        prof.strengths_tools_mastered::text, prof.profile_services::text)) AS skills
+            ) s
+            CROSS JOIN LATERAL (
+                SELECT GREATEST(
+                    CASE WHEN s.genre = qq.q OR (qq.qc <> '' AND s.genre = qq.qc)
+                           OR EXISTS (
+                               SELECT 1 FROM jsonb_array_elements_text(COALESCE(p.tags, '[]'::jsonb)) tag
+                               WHERE LOWER(TRIM(tag)) = qq.q OR (qq.qc <> '' AND LOWER(TRIM(tag)) = qq.qc)
+                           )
+                         THEN 100 ELSE 0 END,
+                    CASE WHEN (qq.short AND s.title ~ ('\\m' || qq.q || '\\M'))
+                           OR (NOT qq.short AND s.title LIKE CONCAT('%', qq.q, '%'))
+                         THEN 80 ELSE 0 END,
+                    CASE WHEN (qq.short AND CONCAT_WS(' ', s.tags, s.genre) ~ ('\\m' || qq.q || '\\M'))
+                           OR (NOT qq.short AND CONCAT_WS(' ', s.tags, s.genre) LIKE CONCAT('%', qq.q, '%'))
+                         THEN 60 ELSE 0 END,
+                    CASE WHEN (qq.short AND s.body ~ ('\\m' || qq.q || '\\M'))
+                           OR (NOT qq.short AND s.body LIKE CONCAT('%', qq.q, '%'))
+                         THEN 40 ELSE 0 END,
+                    (
+                        SELECT 35.0 * COUNT(*) FILTER (WHERE
+                                CASE WHEN w ~ '^[a-z0-9]{2,3}$'
+                                     THEN s.own ~ ('\\m' || w || '\\M')
+                                     ELSE s.own LIKE CONCAT('%', w, '%')
+                                END)
+                               / NULLIF(COUNT(*), 0)
+                        FROM regexp_split_to_table(qq.q, '\\s+') AS w
+                        WHERE length(w) >= 2
+                    ),
+                    CASE WHEN EXISTS (
+                            SELECT 1 FROM unnest(string_to_array(CAST(:terms AS VARCHAR), '|')) AS x(term)
+                            WHERE length(btrim(term)) >= 2
+                            AND (
+                                CASE WHEN LOWER(btrim(term)) ~ '^[a-z0-9]{2,3}$'
+                                     THEN s.own ~ ('\\m' || LOWER(btrim(term)) || '\\M')
+                                     ELSE s.own LIKE CONCAT('%', LOWER(btrim(term)), '%')
+                                END
+                            )
+                        )
+                         THEN 25 ELSE 0 END
+                ) AS relevance
+            ) r
+            WHERE p.deleted_at IS NULL
+            AND u.deleted_at IS NULL
+            AND p.is_public = true
+            AND p.archived_at IS NULL
+            AND (CAST(:genre AS VARCHAR) IS NULL OR p.genre = CAST(:genre AS VARCHAR))
+            AND (p.repost_of_id IS NULL OR EXISTS (
+                SELECT 1 FROM content_posts orig
+                WHERE orig.id = p.repost_of_id
+                AND orig.deleted_at IS NULL AND orig.is_public = true AND orig.archived_at IS NULL
+            ))
+            AND (CAST(:viewerId AS UUID) IS NULL OR NOT EXISTS (
+                SELECT 1 FROM content_post_hides h
+                WHERE h.user_id = CAST(:viewerId AS UUID) AND h.post_id = p.id
+            ))
+            AND r.relevance > 0
+            """;
+
+    /**
+     * Global search over public posts, ranked the way large networks rank a search ("Top" on X,
+     * YouTube's relevance): what the post says first, then how it is doing, then who wrote it.
+     *
+     *   score = relevance                                     (RANKED_SEARCH_CANDIDATES, 25–100)
+     *         × engagement  1 + 0.25·ln(1 + 2·likes + 3·comments + 0.05·views) — logarithmic, so a
+     *                       viral post cannot bury a better match
+     *         × freshness   0.5 + 0.5 / (1 + age / 14 days)^0.6                 — decays, never below ½
+     *         × authority   1.15 when the author's specialties / tools match the query
+     *         × affinity    1.25 when the viewer follows the author
+     *
+     * Then diversity: an author's 2nd best match counts ×0.6, the 3rd ×0.36… so one prolific author
+     * cannot fill the page and other authors' best posts surface between theirs.
+     */
+    @Query(value = """
+            SELECT cp.* FROM content_posts cp
+            INNER JOIN (
+                SELECT scored.id,
+                       scored.score * POWER(0.6, LEAST(ROW_NUMBER() OVER (
+                           PARTITION BY scored.creator_id
+                           ORDER BY scored.score DESC, scored.created_at DESC
+                       ) - 1, 8)) AS final_score
+                FROM (
+                    SELECT p.id, p.creator_id, p.created_at,
+                        r.relevance
+                        * (1 + 0.25 * LN(1
+                            + 2.0 * COALESCE(p.likes, 0)
+                            + 3.0 * (
+                                SELECT COUNT(*) FROM content_comments c
+                                WHERE c.target_type = 'POST' AND c.target_id = p.id
+                                AND c.deleted_at IS NULL AND c.hidden_at IS NULL
+                            )
+                            + 0.05 * COALESCE(p.views, 0)))
+                        * (0.5 + 0.5 / POWER(1 + GREATEST(EXTRACT(EPOCH FROM (LOCALTIMESTAMP - p.created_at)), 0) / 1209600.0, 0.6))
+                        * (CASE WHEN s.skills LIKE CONCAT('%', qq.q, '%')
+                                  OR (qq.qc <> '' AND s.skills LIKE CONCAT('%', qq.qc, '%'))
+                                THEN 1.15 ELSE 1 END)
+                        * (CASE WHEN CAST(:viewerId AS UUID) IS NOT NULL AND EXISTS (
+                                    SELECT 1 FROM creator_follows f
+                                    WHERE f.follower_id = CAST(:viewerId AS UUID) AND f.creator_id = p.creator_id
+                                )
+                                THEN 1.25 ELSE 1 END) AS score
+            """ + RANKED_SEARCH_CANDIDATES + """
+                ) scored
+            ) ranked ON ranked.id = cp.id
+            ORDER BY ranked.final_score DESC, cp.created_at DESC
+            """,
+            countQuery = "SELECT COUNT(*) " + RANKED_SEARCH_CANDIDATES,
+            nativeQuery = true)
+    Page<ContentPost> searchPublicRanked(
+            @Param("viewerId") UUID viewerId,
+            @Param("genre") String genre,
+            @Param("q") String q,
+            @Param("qCanonical") String qCanonical,
+            @Param("terms") String terms,
+            Pageable pageable);
+
     @Modifying
     @Query(value = """
             UPDATE content_posts
@@ -283,4 +429,18 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
             AND f.targetId = cp.id AND cp.isPublic = true AND cp.archivedAt IS NULL
             """)
     Page<ContentPost> findSavedByUserId(@Param("userId") UUID userId, Pageable pageable);
+
+    /** Public posts filed in a saved collection, most recently filed first. */
+    @Query(value = """
+            SELECT cp FROM ContentPost cp, SavedCollectionItem i
+            WHERE i.collection.id = :collectionId AND i.postId = cp.id
+            AND cp.isPublic = true AND cp.archivedAt IS NULL
+            ORDER BY i.addedAt DESC
+            """,
+            countQuery = """
+            SELECT COUNT(cp) FROM ContentPost cp, SavedCollectionItem i
+            WHERE i.collection.id = :collectionId AND i.postId = cp.id
+            AND cp.isPublic = true AND cp.archivedAt IS NULL
+            """)
+    Page<ContentPost> findInSavedCollection(@Param("collectionId") UUID collectionId, Pageable pageable);
 }

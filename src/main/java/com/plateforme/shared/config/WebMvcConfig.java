@@ -20,6 +20,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                 .addPathPatterns(
                         "/api/auth/login",
                         "/api/auth/signup",
+                        "/api/auth/verify-email",
+                        "/api/auth/verify-email/resend",
                         "/api/auth/refresh",
                         "/api/marketplace/**"
                 );

@@ -12,7 +12,9 @@ public record RateLimitProperties(
         int marketplaceWrite,
         int authRefresh,
         int authLogin,
-        int authSignup
+        int authSignup,
+        int authVerifyEmail,
+        int authResendVerification
 ) {
     public RateLimitProperties {
         if (marketplacePublicRead <= 0) marketplacePublicRead = 300;
@@ -21,5 +23,7 @@ public record RateLimitProperties(
         if (authRefresh <= 0)           authRefresh = 30;
         if (authLogin <= 0)             authLogin = 5;
         if (authSignup <= 0)            authSignup = 3;
+        if (authVerifyEmail <= 0)       authVerifyEmail = 10;
+        if (authResendVerification <= 0) authResendVerification = 3;
     }
 }

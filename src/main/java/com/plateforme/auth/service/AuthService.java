@@ -2,7 +2,11 @@ package com.plateforme.auth.service;
 
 import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.LoginRequest;
+import com.plateforme.auth.dto.ResendVerificationRequest;
+import com.plateforme.auth.dto.ResendVerificationResponse;
 import com.plateforme.auth.dto.SignupRequest;
+import com.plateforme.auth.dto.SignupResponse;
+import com.plateforme.auth.dto.VerifyEmailRequest;
 import com.plateforme.auth.security.JwtUtils;
 import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.shared.exception.BusinessException;
@@ -25,6 +29,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
@@ -46,6 +52,7 @@ public class AuthService {
     private final RedisTemplate<String, String> redisTemplate;
     private final EntityManager entityManager;
     private final PublicMediaUrlResolver publicMediaUrlResolver;
+    private final EmailVerificationService emailVerificationService;
 
     @Value("${app.jwt.refresh-expiration}")
     private long refreshExpirationMs;
@@ -53,38 +60,97 @@ public class AuthService {
     @Value("${app.jwt.expiration}")
     private long jwtExpirationMs;
 
+    /**
+     * Creates a local account that stays locked until its e-mail is confirmed: no session is opened
+     * here, a 6-digit code is e-mailed instead (see {@link #verifyEmail}).
+     *
+     * <p>An address registered but never confirmed doesn't block its real owner: signing up again
+     * with it replaces the unconfirmed details (nobody has proven they own that inbox yet) and
+     * sends a new code.
+     */
     @Transactional
-    public AuthResponse signup(SignupRequest request) {
-        if (userRepository.existsByEmail(request.email())) {
+    public SignupResponse signup(SignupRequest request) {
+        String username = UsernameSupport.normalize(request.username());
+        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email())
+                .map(existing -> {
+                    if (Boolean.TRUE.equals(existing.getEmailVerified()) || !"LOCAL".equals(existing.getAuthProvider())) {
+                        throw new BusinessException("EMAIL_ALREADY_EXISTS", "An account with this email already exists.");
+                    }
+                    return existing;
+                })
+                .orElse(null);
+
+        if (user == null && userRepository.existsByEmail(request.email())) {
             throw new BusinessException("EMAIL_ALREADY_EXISTS", "An account with this email already exists.");
         }
+        UsernameSupport.requireAvailable(userRepository, username, user == null ? null : user.getId());
 
-        String username = UsernameSupport.normalize(request.username());
-        UsernameSupport.requireAvailable(userRepository, username, null);
-
-        String roleName = "ROLE_CREATOR";
-        Role role = roleRepository.findByName(roleName)
-                .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role not found."));
-
-        User user = new User();
-        user.setEmail(request.email());
+        boolean isNew = user == null;
+        if (isNew) {
+            Role role = roleRepository.findByName("ROLE_CREATOR")
+                    .orElseThrow(() -> new BusinessException("ROLE_NOT_FOUND", "Role not found."));
+            user = new User();
+            user.setEmail(request.email());
+            user.setRoles(Set.of(role));
+        }
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFullName(request.fullName());
         user.setPublicUsername(username);
-        user.setRoles(Set.of(role));
-
+        user.setEmailVerified(false);
+        user.setEmailVerifiedAt(null);
         user = userRepository.save(user);
-        log.info("Nouvel utilisateur créé: {} avec rôle {}", user.getId(), roleName);
 
-        CreatorProfile profile = new CreatorProfile();
-        profile.setUser(user);
-        entityManager.persist(profile);
-        log.info("Profil créateur créé pour l'utilisateur: {}", user.getId());
+        if (isNew) {
+            CreatorProfile profile = new CreatorProfile();
+            profile.setUser(user);
+            entityManager.persist(profile);
+            log.info("Nouvel utilisateur créé (non vérifié): {}", user.getId());
+        } else {
+            log.info("Inscription relancée pour un compte non vérifié: {}", user.getId());
+        }
+
+        sendVerificationAfterCommit(user, request.locale());
+        return new SignupResponse(
+                user.getEmail(),
+                true,
+                EmailVerificationService.RESEND_COOLDOWN_SECONDS,
+                EmailVerificationService.CODE_TTL_MINUTES);
+    }
+
+    /**
+     * Confirms the e-mail with the code it received, then signs the user in — the first session
+     * of a local account starts here.
+     */
+    @Transactional
+    public AuthResponse verifyEmail(VerifyEmailRequest request) {
+        /* An unknown address gets the same answer as a wrong code: the endpoint reveals nothing. */
+        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email())
+                .orElseThrow(() -> new BusinessException(
+                        "INVALID_VERIFICATION_CODE", "This code is incorrect. Check it and try again."));
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new BusinessException("EMAIL_ALREADY_VERIFIED", "This email is already verified. You can log in.");
+        }
+
+        emailVerificationService.verify(user, request.code());
+
+        LocalDateTime now = LocalDateTime.now();
+        user.setEmailVerified(true);
+        user.setEmailVerifiedAt(now);
+        user.setLastLoginAt(now);
+        userRepository.save(user);
+        log.info("Adresse e-mail vérifiée pour: {}", user.getId());
 
         String accessToken = jwtUtils.generateAccessToken(user);
         RefreshToken refreshToken = createRefreshToken(user);
-
         return buildAuthResponse(accessToken, refreshToken.getToken(), user);
+    }
+
+    /** Sends a new code if the address has an unconfirmed account; the answer is the same either way. */
+    public ResendVerificationResponse resendVerification(ResendVerificationRequest request) {
+        return userRepository.findByEmailAndDeletedAtIsNull(request.email())
+                .filter(user -> !Boolean.TRUE.equals(user.getEmailVerified()))
+                .map(user -> new ResendVerificationResponse(emailVerificationService.sendCode(user, request.locale())))
+                .orElseGet(() -> new ResendVerificationResponse(EmailVerificationService.RESEND_COOLDOWN_SECONDS));
     }
 
     @Transactional
@@ -94,6 +160,13 @@ public class AuthService {
         );
 
         User user = (User) authentication.getPrincipal();
+
+        /* Checked after the password, so this answer never tells a stranger the account exists. */
+        if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+            emailVerificationService.sendCodeQuietly(user, request.locale());
+            throw new BusinessException("EMAIL_NOT_VERIFIED", "Please confirm your email address to continue.");
+        }
+
         user.setLastLoginAt(LocalDateTime.now());
         userRepository.save(user);
 
@@ -152,6 +225,20 @@ public class AuthService {
 
     public boolean isTokenBlacklisted(String jti) {
         return Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + jti));
+    }
+
+    /** The code goes out once the account is committed, so a rolled-back sign-up never e-mails anyone. */
+    private void sendVerificationAfterCommit(User user, String locale) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            emailVerificationService.sendCodeQuietly(user, locale);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                emailVerificationService.sendCodeQuietly(user, locale);
+            }
+        });
     }
 
     private RefreshToken createRefreshToken(User user) {

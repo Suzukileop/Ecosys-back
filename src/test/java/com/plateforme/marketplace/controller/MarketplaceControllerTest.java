@@ -118,6 +118,8 @@ class MarketplaceControllerTest {
                 null,
                 null,
                 null,
+                null,
+                null,
                 null);
 
         when(marketplaceService.getCreators(isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), isNull(), any()))

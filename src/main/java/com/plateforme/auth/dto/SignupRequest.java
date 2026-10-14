@@ -26,5 +26,13 @@ public record SignupRequest(
         String username,
 
         /** Ignored — all accounts are created as CREATOR. Kept for API compatibility. */
-        String role
-) {}
+        String role,
+
+        /** Interface language (e.g. "fr"), used for the verification e-mail. Optional. */
+        @Size(max = 16)
+        String locale
+) {
+    public SignupRequest(String email, String password, String fullName, String username, String role) {
+        this(email, password, fullName, username, role, null);
+    }
+}

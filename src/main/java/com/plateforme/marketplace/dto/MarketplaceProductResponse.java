@@ -54,5 +54,9 @@ public record MarketplaceProductResponse(
         boolean showOnProfile,
         /** Rank among the shop's published products by units sold (1–3), null outside the top 3. */
         Integer bestsellerRank,
-        List<CatalogueBestseller> catalogueBestsellers
+        List<CatalogueBestseller> catalogueBestsellers,
+        /** Merchandising badges set by the creator ({@code ProductStatusLabel} names, at most 3). */
+        List<String> statusLabels,
+        /** The creator's name for an {@code OTHER} type; null for every other type. */
+        String typeLabel
 ) {}

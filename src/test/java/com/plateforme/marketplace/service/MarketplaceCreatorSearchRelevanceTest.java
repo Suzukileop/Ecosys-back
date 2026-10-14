@@ -76,7 +76,7 @@ class MarketplaceCreatorSearchRelevanceTest {
     @DisplayName("q=dev expands to Developer for exact specialty ranking")
     void search_expandsDevAliasToDeveloperCanonical() {
         when(creatorProfileRepository.searchByBioOrSpecialite(
-                        anyString(), anyString(), anyString(), any(), any(), any(), any(), anyString(), anyString(), any(), any()))
+                        anyString(), anyString(), anyString(), any(), any(), any(), any(), anyString(), anyString(), any(), anyString(), any()))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.searchCreators(
@@ -97,6 +97,7 @@ class MarketplaceCreatorSearchRelevanceTest {
                 eq(""),
                 eq(""),
                 isNull(),
+                eq(""),
                 eq(pageable));
 
         assertThat(qCap.getValue()).isEqualTo("dev");
@@ -109,7 +110,7 @@ class MarketplaceCreatorSearchRelevanceTest {
     @DisplayName("Popular chip specialite=dev prefers canonical Developer + alt raw")
     void list_expandsSpecialtyChipForExactFirstRanking() {
         when(creatorProfileRepository.findForMarketplace(
-                        any(), anyString(), anyString(), any(), any(), any(), any(), any()))
+                        any(), anyString(), anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.getCreators(
@@ -126,6 +127,7 @@ class MarketplaceCreatorSearchRelevanceTest {
                 isNull(),
                 isNull(),
                 isNull(),
+                eq(""),
                 eq(pageable));
 
         assertThat(primaryCap.getValue()).isEqualTo("Developer");
@@ -138,7 +140,7 @@ class MarketplaceCreatorSearchRelevanceTest {
     @DisplayName("blank keyword falls back to list path with verified")
     void search_blankKeywordUsesListWithVerified() {
         when(creatorProfileRepository.findForMarketplace(
-                        any(), anyString(), anyString(), any(), any(), any(), any(), any()))
+                        any(), anyString(), anyString(), any(), any(), any(), any(), anyString(), any()))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
         marketplaceService.searchCreators(
@@ -152,6 +154,32 @@ class MarketplaceCreatorSearchRelevanceTest {
                 isNull(),
                 isNull(),
                 isNull(),
+                eq(""),
                 eq(pageable));
+    }
+
+    @Test
+    @DisplayName("sort=rate reaches the list query; unknown sorts fall back to Recommended")
+    void list_passesExplicitSortKey() {
+        when(creatorProfileRepository.findForMarketplace(
+                        any(), anyString(), anyString(), any(), any(), any(), any(), anyString(), any()))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        marketplaceService.getCreators(
+                "dev", null, null, null, null, null, null, null, "rate", null, pageable);
+
+        verify(creatorProfileRepository).findForMarketplace(
+                anyString(),
+                anyString(),
+                anyString(),
+                isNull(),
+                isNull(),
+                isNull(),
+                isNull(),
+                eq("rate"),
+                eq(pageable));
+        assertThat(MarketplaceService.listSortKey("most_stars")).isEqualTo("stars");
+        assertThat(MarketplaceService.listSortKey("distance")).isEmpty();
+        assertThat(MarketplaceService.listSortKey(null)).isEmpty();
     }
 }

@@ -209,6 +209,8 @@ class MarketplaceProductServiceTest {
                 null,
                 false,
                 List.of(),
+                null,
+                null,
                 null
         );
 
@@ -218,6 +220,34 @@ class MarketplaceProductServiceTest {
                 .isEqualTo("INVALID_COMPARE_PRICE");
 
         verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("normalizeStatusLabels : upper-case, dédoublonne, garde l'ordre")
+    void normalizeStatusLabels_normalizes() {
+        assertThat(MarketplaceProductService.normalizeStatusLabels(
+                List.of("promotion", " TRENDING ", "Promotion", "")))
+                .containsExactly("PROMOTION", "TRENDING");
+        assertThat(MarketplaceProductService.normalizeStatusLabels(null)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("normalizeStatusLabels : statut inconnu → INVALID_STATUS_LABEL")
+    void normalizeStatusLabels_unknown() {
+        assertThatThrownBy(() -> MarketplaceProductService.normalizeStatusLabels(List.of("FREE_SHIPPING")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("INVALID_STATUS_LABEL");
+    }
+
+    @Test
+    @DisplayName("normalizeStatusLabels : plus de 3 statuts → TOO_MANY_STATUS_LABELS")
+    void normalizeStatusLabels_tooMany() {
+        assertThatThrownBy(() -> MarketplaceProductService.normalizeStatusLabels(
+                List.of("NEW", "PROMOTION", "TRENDING", "POPULAR")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("code")
+                .isEqualTo("TOO_MANY_STATUS_LABELS");
     }
 
     private MarketplaceProductRequest sampleRequest(Integer previewLimit) {
@@ -249,6 +279,8 @@ class MarketplaceProductServiceTest {
                 null,
                 false,
                 List.of(),
+                null,
+                null,
                 null
         );
     }
