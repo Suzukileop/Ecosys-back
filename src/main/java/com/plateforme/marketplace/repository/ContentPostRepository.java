@@ -77,6 +77,10 @@ public interface ContentPostRepository extends JpaRepository<ContentPost, UUID> 
 
     long countByCreator_Id(UUID creatorId);
 
+    /** Grouped count for a page of creator cards: [creatorId, count] rows, creators with none omitted. */
+    @Query("SELECT c.creator.id, COUNT(c) FROM ContentPost c WHERE c.creator.id IN :creatorIds GROUP BY c.creator.id")
+    List<Object[]> countByCreatorIds(@Param("creatorIds") Collection<UUID> creatorIds);
+
     List<ContentPost> findByCreator_IdOrderByCreatedAtDesc(UUID creatorId);
 
     /**

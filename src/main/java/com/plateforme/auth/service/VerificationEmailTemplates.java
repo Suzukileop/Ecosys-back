@@ -4,17 +4,20 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Plain-text verification e-mail in the interface languages (en, fr, es, pt, ar, ru, zh).
+ * Plain-text one-time-code e-mails in the interface languages (en, fr, es, pt, ar, ru, zh).
  * Unknown or missing locales fall back to English.
  */
 final class VerificationEmailTemplates {
+
+    /** Which e-mail goes out: confirming a sign-up, or choosing a password (set up or reset). */
+    enum Kind { VERIFY_EMAIL, PASSWORD }
 
     record Email(String subject, String body) {}
 
     /** {code}, {minutes} and {name} are substituted; subject also carries the code for inbox previews. */
     private record Template(String subject, String greeting, String greetingNoName, String body) {}
 
-    private static final Map<String, Template> TEMPLATES = Map.of(
+    private static final Map<String, Template> VERIFY_EMAIL = Map.of(
             "en", new Template(
                     "{code} is your Skraft verification code",
                     "Hi {name},",
@@ -101,11 +104,102 @@ final class VerificationEmailTemplates {
                     如果你没有注册 Skraft 账户，请忽略此邮件。""")
     );
 
+    /* One text for both "create a password" (signed in, account made with Google) and "forgot
+       password": either way the code lets someone choose the account's password, which is what the
+       reader must recognise — and refuse if it wasn't them. */
+    private static final Map<String, Template> PASSWORD = Map.of(
+            "en", new Template(
+                    "{code} is your Skraft password code",
+                    "Hi {name},",
+                    "Hi,",
+                    """
+                    Someone asked to choose a new password for your Skraft account. Here is your code:
+
+                        {code}
+
+                    It expires in {minutes} minutes. Never share this code with anyone — Skraft will never ask you for it.
+
+                    If this wasn't you, ignore this email: your password stays unchanged."""),
+            "fr", new Template(
+                    "{code} est votre code de mot de passe Skraft",
+                    "Bonjour {name},",
+                    "Bonjour,",
+                    """
+                    Une demande a été faite pour choisir un nouveau mot de passe pour votre compte Skraft. Voici votre code :
+
+                        {code}
+
+                    Il expire dans {minutes} minutes. Ne communiquez jamais ce code — Skraft ne vous le demandera jamais.
+
+                    Si vous n'êtes pas à l'origine de cette demande, ignorez cet e-mail : votre mot de passe reste inchangé."""),
+            "es", new Template(
+                    "{code} es tu código de contraseña de Skraft",
+                    "Hola, {name}:",
+                    "Hola:",
+                    """
+                    Se ha solicitado elegir una nueva contraseña para tu cuenta de Skraft. Este es tu código:
+
+                        {code}
+
+                    Caduca en {minutes} minutos. No compartas este código con nadie: Skraft nunca te lo pedirá.
+
+                    Si no fuiste tú, ignora este correo: tu contraseña no cambiará."""),
+            "pt", new Template(
+                    "{code} é o seu código de senha do Skraft",
+                    "Olá, {name},",
+                    "Olá,",
+                    """
+                    Foi solicitada a escolha de uma nova senha para a sua conta no Skraft. Aqui está o seu código:
+
+                        {code}
+
+                    Ele expira em {minutes} minutos. Nunca compartilhe este código — o Skraft nunca vai pedi-lo.
+
+                    Se não foi você, ignore este e-mail: sua senha continua a mesma."""),
+            "ar", new Template(
+                    "{code} هو رمز كلمة المرور الخاص بك في Skraft",
+                    "مرحبًا {name}،",
+                    "مرحبًا،",
+                    """
+                    طلب أحدهم اختيار كلمة مرور جديدة لحسابك في Skraft. إليك الرمز:
+
+                        {code}
+
+                    تنتهي صلاحيته خلال {minutes} دقيقة. لا تشارك هذا الرمز مع أي شخص — لن يطلبه منك Skraft أبدًا.
+
+                    إذا لم تكن أنت من قدّم الطلب، تجاهل هذه الرسالة: ستبقى كلمة مرورك كما هي."""),
+            "ru", new Template(
+                    "{code} — ваш код для пароля Skraft",
+                    "Здравствуйте, {name}!",
+                    "Здравствуйте!",
+                    """
+                    Поступил запрос на выбор нового пароля для вашего аккаунта Skraft. Ваш код:
+
+                        {code}
+
+                    Код действует {minutes} минут. Никому не сообщайте его — Skraft никогда его у вас не попросит.
+
+                    Если это были не вы, просто проигнорируйте письмо: ваш пароль не изменится."""),
+            "zh", new Template(
+                    "{code} 是你的 Skraft 密码验证码",
+                    "{name}，你好：",
+                    "你好：",
+                    """
+                    有人请求为你的 Skraft 账户设置新密码。你的验证码是：
+
+                        {code}
+
+                    验证码将在 {minutes} 分钟后失效。请勿向任何人透露此验证码——Skraft 绝不会向你索取。
+
+                    如果这不是你本人的操作，请忽略此邮件，你的密码不会改变。""")
+    );
+
     private VerificationEmailTemplates() {
     }
 
-    static Email render(String locale, String fullName, String code, int minutes) {
-        Template template = TEMPLATES.getOrDefault(language(locale), TEMPLATES.get("en"));
+    static Email render(Kind kind, String locale, String fullName, String code, int minutes) {
+        Map<String, Template> templates = kind == Kind.PASSWORD ? PASSWORD : VERIFY_EMAIL;
+        Template template = templates.getOrDefault(language(locale), templates.get("en"));
         String name = fullName == null ? "" : fullName.trim();
         String greeting = name.isEmpty() ? template.greetingNoName() : template.greeting().replace("{name}", name);
         String body = greeting + "\n\n" + template.body()

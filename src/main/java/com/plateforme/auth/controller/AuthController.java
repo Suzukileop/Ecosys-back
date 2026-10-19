@@ -1,13 +1,16 @@
 package com.plateforme.auth.controller;
 
 import com.plateforme.auth.dto.AuthResponse;
+import com.plateforme.auth.dto.ForgotPasswordRequest;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.ResendVerificationRequest;
 import com.plateforme.auth.dto.ResendVerificationResponse;
+import com.plateforme.auth.dto.ResetPasswordRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.dto.SignupResponse;
 import com.plateforme.auth.dto.VerifyEmailRequest;
 import com.plateforme.auth.security.JwtUtils;
+import com.plateforme.auth.security.RefreshTokenCookies;
 import com.plateforme.auth.service.AuthService;
 import com.plateforme.shared.util.LogMasking;
 import com.plateforme.user.entity.User;
@@ -38,6 +41,7 @@ public class AuthController {
     private final AuthService authService;
     private final JwtUtils jwtUtils;
     private final PresenceService presenceService;
+    private final RefreshTokenCookies refreshTokenCookies;
 
     @Operation(summary = "Inscription",
             description = "Crée un compte CREATOR verrouillé et envoie un code de vérification par e-mail. "
@@ -63,7 +67,7 @@ public class AuthController {
     })
     @PostMapping("/verify-email")
     public ResponseEntity<AuthResponse> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
-        return ResponseEntity.ok(authService.verifyEmail(request));
+        return refreshTokenCookies.issue(authService.verifyEmail(request));
     }
 
     @Operation(summary = "Renvoyer le code",
@@ -78,6 +82,30 @@ public class AuthController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.resendVerification(request));
     }
 
+    @Operation(summary = "Mot de passe oublié",
+            description = "Envoie un code de réinitialisation si l'adresse a un compte actif. Réponse identique dans tous les cas.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "202", description = "Demande prise en compte"),
+            @ApiResponse(responseCode = "429", description = "Trop de requêtes")
+    })
+    @PostMapping("/password/forgot")
+    public ResponseEntity<ResendVerificationResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(authService.forgotPassword(request));
+    }
+
+    @Operation(summary = "Réinitialiser le mot de passe",
+            description = "Vérifie le code reçu par e-mail, enregistre le nouveau mot de passe et ferme toutes les sessions.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "204", description = "Mot de passe modifié"),
+            @ApiResponse(responseCode = "400", description = "Code incorrect, expiré ou trop d'essais"),
+            @ApiResponse(responseCode = "429", description = "Trop de requêtes")
+    })
+    @PostMapping("/password/reset")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.noContent().build();
+    }
+
     @Operation(summary = "Connexion", description = "Authentifie un utilisateur et retourne les tokens")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Connexion réussie"),
@@ -88,7 +116,7 @@ public class AuthController {
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         log.info("Tentative de connexion pour: {}", LogMasking.email(request.email()));
         AuthResponse response = authService.login(request);
-        return ResponseEntity.ok(response);
+        return refreshTokenCookies.issue(response);
     }
 
     @Operation(summary = "Renouveler le token", description = "Génère un nouvel access token à partir du refresh token")
@@ -104,7 +132,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
         AuthResponse response = authService.refreshToken(refreshToken);
-        return ResponseEntity.ok(response);
+        return refreshTokenCookies.issue(response);
     }
 
     @Operation(summary = "Déconnexion", description = "Révoque le refresh token et blackliste l'access token courant")
@@ -139,7 +167,9 @@ public class AuthController {
             }
         }
         log.info("Déconnexion effectuée pour: {}", userDetails != null ? userDetails.getUsername() : "unknown");
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.noContent()
+                .header(org.springframework.http.HttpHeaders.SET_COOKIE, refreshTokenCookies.clearHeader())
+                .build();
     }
 
     private String extractJwtFromRequest(HttpServletRequest request) {

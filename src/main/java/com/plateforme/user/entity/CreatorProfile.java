@@ -14,10 +14,15 @@ import com.plateforme.user.dto.ProfileServiceDto;
 import com.plateforme.user.dto.ProfileSpokenLanguageDto;
 import com.plateforme.user.dto.ProfileStrengthToolDto;
 import com.plateforme.user.dto.ProfileTeamMemberDto;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.ColumnTransformer;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
@@ -261,9 +266,49 @@ public class CreatorProfile {
     @Column(name = "profile_visits", nullable = false)
     private Integer profileVisits = 0;
 
-    @JdbcTypeCode(SqlTypes.JSON)
+    /*
+     * The portfolio presentation document (~60 KB per profile) is kept as raw JSON text and parsed only
+     * when something reads it. Mapped as a Map, it was deserialized every time a profile was loaded —
+     * twenty times for one page of directory cards that never display it.
+     */
     @Column(name = "portfolio_settings", columnDefinition = "jsonb", nullable = false)
-    private Map<String, Object> portfolioSettings = new HashMap<>();
+    @ColumnTransformer(write = "?::jsonb")
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private String portfolioSettingsJson = "{}";
+
+    @Transient
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private Map<String, Object> portfolioSettingsParsed;
+
+    private static final ObjectMapper PORTFOLIO_SETTINGS_JSON = new ObjectMapper();
+    private static final TypeReference<Map<String, Object>> SETTINGS_TYPE = new TypeReference<>() { };
+
+    /** Parsed on first access. Change it through {@link #setPortfolioSettings}, not in place. */
+    public Map<String, Object> getPortfolioSettings() {
+        if (portfolioSettingsParsed == null) {
+            try {
+                String json = portfolioSettingsJson == null || portfolioSettingsJson.isBlank()
+                        ? "{}"
+                        : portfolioSettingsJson;
+                portfolioSettingsParsed = PORTFOLIO_SETTINGS_JSON.readValue(json, SETTINGS_TYPE);
+            } catch (JsonProcessingException ex) {
+                throw new IllegalStateException("Stored portfolio_settings is not valid JSON", ex);
+            }
+        }
+        return portfolioSettingsParsed;
+    }
+
+    public void setPortfolioSettings(Map<String, Object> settings) {
+        Map<String, Object> value = settings == null ? new HashMap<>() : settings;
+        try {
+            portfolioSettingsJson = PORTFOLIO_SETTINGS_JSON.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("Portfolio settings cannot be written as JSON", ex);
+        }
+        portfolioSettingsParsed = value;
+    }
 
     @CreatedDate
     @Column(name = "created_at", updatable = false)

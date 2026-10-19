@@ -1,9 +1,11 @@
 package com.plateforme.auth.service;
 
 import com.plateforme.auth.dto.AuthResponse;
+import com.plateforme.auth.dto.ForgotPasswordRequest;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.ResendVerificationRequest;
 import com.plateforme.auth.dto.ResendVerificationResponse;
+import com.plateforme.auth.dto.ResetPasswordRequest;
 import com.plateforme.auth.dto.SignupRequest;
 import com.plateforme.auth.dto.SignupResponse;
 import com.plateforme.auth.dto.VerifyEmailRequest;
@@ -151,6 +153,45 @@ public class AuthService {
                 .filter(user -> !Boolean.TRUE.equals(user.getEmailVerified()))
                 .map(user -> new ResendVerificationResponse(emailVerificationService.sendCode(user, request.locale())))
                 .orElseGet(() -> new ResendVerificationResponse(EmailVerificationService.RESEND_COOLDOWN_SECONDS));
+    }
+
+    /**
+     * "Forgot password?": e-mails a code if the address has an active account. The answer never
+     * depends on whether it does (same body, no hourly-cap error), so the endpoint can't be used to
+     * find out who is registered. Works for accounts made with Google too — it's how they get a
+     * password from the log-in page.
+     */
+    public ResendVerificationResponse forgotPassword(ForgotPasswordRequest request) {
+        userRepository.findByEmailAndDeletedAtIsNull(request.email())
+                .filter(User::isEnabled)
+                .ifPresent(user -> emailVerificationService.sendCodeQuietly(
+                        user, request.locale(), VerificationCodePurpose.PASSWORD_RESET));
+        return new ResendVerificationResponse(EmailVerificationService.RESEND_COOLDOWN_SECONDS);
+    }
+
+    /**
+     * Sets a new password with a code from {@link #forgotPassword}. The code proves the inbox, so an
+     * unconfirmed address is confirmed by it; every session is ended, so whoever may have had the old
+     * password (or a stolen session) is signed out. No session is opened here: the user logs in next.
+     */
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        /* An unknown address gets the same answer as a wrong code: the endpoint reveals nothing. */
+        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email())
+                .filter(User::isEnabled)
+                .orElseThrow(() -> new BusinessException(
+                        "INVALID_VERIFICATION_CODE", "This code is incorrect. Check it and try again."));
+
+        emailVerificationService.verify(user, request.code(), VerificationCodePurpose.PASSWORD_RESET);
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+            user.setEmailVerified(true);
+            user.setEmailVerifiedAt(LocalDateTime.now());
+        }
+        userRepository.save(user);
+        revokeAllUserTokens(user);
+        log.info("Mot de passe réinitialisé pour: {}", user.getId());
     }
 
     @Transactional

@@ -67,6 +67,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/marketplace/creators/*/view").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/marketplace/creators/*/contact-messages").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reference/**").permitAll()
+                        /** Landing-page feedback form: anonymous visitors (rate-limited per IP in the service). */
+                        .requestMatchers(HttpMethod.POST, "/api/public/feedback").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/contents/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/marketplace/social/reactions/counts").permitAll()
@@ -77,6 +79,8 @@ public class SecurityConfig {
                                 "/api/auth/signup",
                                 "/api/auth/verify-email",
                                 "/api/auth/verify-email/resend",
+                                "/api/auth/password/forgot",
+                                "/api/auth/password/reset",
                                 "/api/auth/login",
                                 "/api/auth/refresh",
                                 "/api/auth/logout",

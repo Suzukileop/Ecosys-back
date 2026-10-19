@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
@@ -36,7 +35,6 @@ import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -49,7 +47,6 @@ public class OAuthService {
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final RefreshTokenRepository refreshTokenRepository;
-    private final PasswordEncoder passwordEncoder;
     private final JwtUtils jwtUtils;
     private final EntityManager entityManager;
     private final ObjectMapper objectMapper;
@@ -193,6 +190,13 @@ public class OAuthService {
     private User finalizeExistingUser(User user, OAuthProfilePayload profile) {
         if (!profile.provider().equals(user.getAuthProvider())) {
             if ("LOCAL".equals(user.getAuthProvider())) {
+                /* Pre-account takeover: anyone can sign up with someone else's address and pick a
+                   password; the code never reaches them, so the account stays unconfirmed. When the
+                   real owner then arrives through the provider, the address is proven theirs — and the
+                   stranger's password must not survive, or it would still open the account. */
+                if (!Boolean.TRUE.equals(user.getEmailVerified())) {
+                    user.setPasswordHash(null);
+                }
                 user.setAuthProvider(profile.provider());
                 user.setProviderUserId(profile.providerUserId());
             } else {
@@ -248,7 +252,10 @@ public class OAuthService {
         user.setAvatarUrl(profile.avatarUrl());
         user.setAuthProvider(profile.provider());
         user.setProviderUserId(profile.providerUserId());
-        user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        /* No password: the account signs in through the provider. One can be added later from
+           Settings › Security (with an e-mailed code) or through "Forgot password?". A random hash here
+           would make the account look like it has a password nobody knows. */
+        user.setPasswordHash(null);
         user.setEmailVerified(true);
         user.setEmailVerifiedAt(LocalDateTime.now());
         user.setRoles(Set.of(roleEntity));

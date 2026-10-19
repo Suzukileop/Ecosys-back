@@ -1,5 +1,6 @@
 package com.plateforme.shared.controller;
 
+import com.plateforme.shared.util.ClientIp;
 import com.plateforme.shared.dto.LandingFeedbackRequest;
 import com.plateforme.shared.service.LandingFeedbackService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -36,14 +37,6 @@ public class LandingFeedbackController {
     }
 
     private static String resolveClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        String xri = request.getHeader("X-Real-IP");
-        if (xri != null && !xri.isBlank()) {
-            return xri.trim();
-        }
-        return request.getRemoteAddr();
+        return ClientIp.resolve(request);
     }
 }

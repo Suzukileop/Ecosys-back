@@ -86,6 +86,12 @@ app:
 
 Voir `V8__seed_test_accounts.sql` (`admin@noprobleme.com` / `Admin123!`) et `V22__seed_test_client_credits.sql` (`client@noprobleme.com` / `Client123!`).
 
+Pour tester à plusieurs en parallèle (une connexion déconnecte la précédente sur un même compte), `scripts/seed-test-creators.sql` crée en local `tester1@noprobleme.com` … `tester8@noprobleme.com` / `Tester123!`, chacun avec une copie du profil de `creator@noprobleme.com`. Script de dev uniquement (hors Flyway) :
+
+```bash
+psql -h localhost -U postgres -d noprobleme -f scripts/seed-test-creators.sql
+```
+
 ## Développement
 
 ```bash

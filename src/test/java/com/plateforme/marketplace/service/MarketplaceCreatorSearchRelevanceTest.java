@@ -5,8 +5,10 @@ import com.plateforme.shared.storage.PublicMediaUrlResolver;
 import com.plateforme.marketplace.repository.ContentPostRepository;
 import com.plateforme.marketplace.repository.MarketplaceProductRepository;
 import com.plateforme.user.repository.CreatorFollowRepository;
+import com.plateforme.user.repository.CreatorPortfolioPostRepository;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.CreatorProfileVisitRepository;
+import com.plateforme.user.repository.CreatorStarRepository;
 import com.plateforme.user.repository.UserRepository;
 import com.plateforme.user.service.CreatorFollowService;
 import com.plateforme.user.service.CreatorPortfolioService;
@@ -49,6 +51,8 @@ class MarketplaceCreatorSearchRelevanceTest {
     @Mock CreatorFollowRepository creatorFollowRepository;
     @Mock PublicMediaUrlResolver publicMediaUrlResolver;
     @Mock UserRepository userRepository;
+    @Mock CreatorPortfolioPostRepository creatorPortfolioPostRepository;
+    @Mock CreatorStarRepository creatorStarRepository;
 
     MarketplaceService marketplaceService;
     Pageable pageable;
@@ -66,7 +70,9 @@ class MarketplaceCreatorSearchRelevanceTest {
                 creatorFollowService,
                 creatorFollowRepository,
                 publicMediaUrlResolver,
-                userRepository);
+                userRepository,
+                creatorPortfolioPostRepository,
+                creatorStarRepository);
         pageable = PageRequest.of(0, 12);
         when(creatorFollowService.getFollowedCreatorIds(any(), any())).thenReturn(Set.of());
         when(creatorFollowService.getFollowerCounts(any())).thenReturn(Map.of());

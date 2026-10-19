@@ -3,6 +3,8 @@ package com.plateforme.user.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.plateforme.auth.service.EmailVerificationService;
+import com.plateforme.auth.service.VerificationCodePurpose;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.user.dto.AccountSecurityDto;
 import com.plateforme.user.dto.ChangePasswordRequest;
@@ -42,6 +44,7 @@ public class AccountService {
     private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
+    private final EmailVerificationService emailVerificationService;
 
     @Transactional(readOnly = true)
     public AccountSecurityDto getSecurity(UUID userId) {
@@ -60,10 +63,32 @@ public class AccountService {
         );
     }
 
+    /**
+     * E-mails the code an account without a password (made with Google) needs before it can add one.
+     * A signed-in session alone isn't enough proof: a session left open on a shared computer, or a
+     * stolen cookie, could otherwise plant its own password and keep the account.
+     *
+     * @return seconds before another code can be requested
+     */
+    public long sendPasswordSetupCode(UUID userId, String locale) {
+        User user = requireUser(userId);
+        if (hasPassword(user)) {
+            throw new BusinessException("PASSWORD_ALREADY_SET", "Your account already has a password.");
+        }
+        return emailVerificationService.sendCode(user, locale, VerificationCodePurpose.PASSWORD_SETUP);
+    }
+
     @Transactional
     public void changePassword(UUID userId, ChangePasswordRequest request) {
         User user = requireUser(userId);
-        if (hasPassword(user)) {
+        if (!hasPassword(user)) {
+            /* First password: proven by the e-mailed code (sendPasswordSetupCode), not the session. */
+            String code = request.verificationCode();
+            if (code == null || code.isBlank()) {
+                throw new BusinessException("VERIFICATION_CODE_REQUIRED", "Enter the code we emailed you.");
+            }
+            emailVerificationService.verify(user, code, VerificationCodePurpose.PASSWORD_SETUP);
+        } else {
             String current = request.currentPassword();
             if (current == null || current.isBlank() || !passwordEncoder.matches(current, user.getPasswordHash())) {
                 throw new BusinessException("INVALID_CURRENT_PASSWORD", "Your current password is incorrect.");

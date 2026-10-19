@@ -1,9 +1,26 @@
 spring:
+  # SMTP: the host, port, username and password come from the environment or the git-ignored
+  # application-local.yml (spring.mail.host / SPRING_MAIL_HOST…). Without a host, no mail sender is
+  # created and LoggingMailDeliveryService takes over. Below: only what is not secret — Gmail / Brevo
+  # on port 587 require STARTTLS, and the timeouts keep a slow SMTP server from hanging a request thread.
+  mail:
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
   datasource:
     # options=… : réduit les avertissements JDBC liés au locale / encodage client
     url: jdbc:postgresql://localhost:5432/noprobleme?options=-c%20client_encoding%3DUTF8
     username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:Pgsql_2025!Eco_Secure#X9}
+    # No committed fallback: DB_PASSWORD, or spring.datasource.password in the git-ignored
+    # application-local.yml (SPRING_PROFILES_ACTIVE=local) on a developer machine.
+    password: ${DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       connection-init-sql: SET client_encoding TO 'UTF8'
@@ -25,6 +42,9 @@ spring:
         jdbc:
           time_zone: UTC
         format_sql: false
+        # Lazy associations / collections reached in a loop (e.g. profile.getUser() on each card of a
+        # page) load with one IN (…) query per batch instead of one query per row.
+        default_batch_fetch_size: 50
   flyway:
     enabled: true
     locations: classpath:db/migration
@@ -102,6 +122,10 @@ app:
 
 server:
   port: 8080
+  # X-Forwarded-For / -Proto are honoured only when the request comes from an internal proxy
+  # (loopback / private ranges: the Next server, the tunnel, a load balancer). Rate limits then key on
+  # the real client, and a client can no longer pick its own "IP" with a header (see ClientIp).
+  forward-headers-strategy: native
   compression:
     # Les reponses JSON partaient non compressees : ~4x plus d'octets sur chaque appel API,
     # ce qui se paie entierement sur une liaison lente (tunnel, mobile).
@@ -114,8 +138,18 @@ server:
 scheduling:
   enabled: true
 
+logging:
+  charset:
+    # Accented log lines came out as "d�plac�" in the Windows console and in files.
+    console: UTF-8
+    file: UTF-8
+
+# Off unless SWAGGER_ENABLED=true (application-local.yml turns it on for development): a public
+# Swagger lists every route and takes ~3 s to generate its document.
 springdoc:
   api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /api-docs
   swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /swagger-ui.html

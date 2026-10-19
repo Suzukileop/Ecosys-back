@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import com.plateforme.auth.dto.LoginRequest;
 import com.plateforme.auth.dto.SignupRequest;
+import com.plateforme.auth.dto.SignupResponse;
 import com.plateforme.auth.service.AuthService;
 import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.user.dto.UserDto;
@@ -61,15 +62,17 @@ class AuthControllerIntegrationTest {
     @Test
     void signup_returns201_whenValidRequest() throws Exception {
         SignupRequest request = new SignupRequest("new@example.com", "password123", "New User", "newuser", "CREATOR");
-        when(authService.signup(any(SignupRequest.class))).thenReturn(buildTestAuthResponse());
+        when(authService.signup(any(SignupRequest.class)))
+                .thenReturn(new SignupResponse("new@example.com", true, 60L, 15));
 
+        /* Sign-up opens no session: it answers with the verification step, never with tokens. */
         mockMvc.perform(post("/api/auth/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.accessToken").value("access-token"))
-                .andExpect(jsonPath("$.tokenType").value("Bearer"))
-                .andExpect(jsonPath("$.user.email").value("test@example.com"));
+                .andExpect(jsonPath("$.email").value("new@example.com"))
+                .andExpect(jsonPath("$.verificationRequired").value(true))
+                .andExpect(jsonPath("$.accessToken").doesNotExist());
     }
 
     @Test
@@ -120,7 +123,14 @@ class AuthControllerIntegrationTest {
         mockMvc.perform(post("/api/auth/refresh")
                         .cookie(new Cookie("refresh_token", "valid-refresh-token")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("access-token"));
+                .andExpect(jsonPath("$.accessToken").value("access-token"))
+                /* The rotated refresh token goes to an HttpOnly cookie, never to JavaScript. */
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(header().string("Set-Cookie",
+                        org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.containsString("refresh_token=refresh-token"),
+                                org.hamcrest.Matchers.containsString("HttpOnly"),
+                                org.hamcrest.Matchers.containsString("SameSite=Strict"))));
     }
 
     @Test

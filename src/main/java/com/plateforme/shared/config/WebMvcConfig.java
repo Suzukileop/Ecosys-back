@@ -22,6 +22,8 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         "/api/auth/signup",
                         "/api/auth/verify-email",
                         "/api/auth/verify-email/resend",
+                        "/api/auth/password/forgot",
+                        "/api/auth/password/reset",
                         "/api/auth/refresh",
                         "/api/marketplace/**"
                 );

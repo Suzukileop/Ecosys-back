@@ -33,6 +33,11 @@ public interface MarketplaceProductRepository extends JpaRepository<MarketplaceP
 
     long countByCreator_IdAndIsPublishedTrue(UUID creatorId);
 
+    /** Grouped count for a page of creator cards: [creatorId, count] rows, creators with none omitted. */
+    @Query("SELECT p.creator.id, COUNT(p) FROM MarketplaceProduct p "
+            + "WHERE p.creator.id IN :creatorIds AND p.isPublished = true GROUP BY p.creator.id")
+    List<Object[]> countPublishedByCreatorIds(@Param("creatorIds") Collection<UUID> creatorIds);
+
     long countByCreator_IdAndIsPublishedTrueAndShowOnProfileTrue(UUID creatorId);
 
     Optional<MarketplaceProduct> findByIdAndIsPublishedTrue(UUID id);

@@ -46,6 +46,10 @@ public class HttpCacheInterceptor implements HandlerInterceptor {
 
         String path = request.getRequestURI();
 
+        // The same URL answers differently for a guest and a signed-in viewer (isFollowing, liked…).
+        // Without this, the browser can serve the cached guest copy right after login.
+        response.addHeader(HttpHeaders.VARY, HttpHeaders.AUTHORIZATION);
+
         // Per-user endpoints → always private
         if (isUserSpecific(path) || hasBearer(request)) {
             response.setHeader(HttpHeaders.CACHE_CONTROL, "private, no-store");

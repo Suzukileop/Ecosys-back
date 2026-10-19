@@ -28,6 +28,8 @@ import com.plateforme.user.repository.CreatorFollowRepository;
 import com.plateforme.user.repository.CreatorProfileRepository;
 import com.plateforme.user.repository.CreatorProfileVisitRepository;
 import com.plateforme.user.repository.UserRepository;
+import com.plateforme.user.repository.CreatorPortfolioPostRepository;
+import com.plateforme.user.repository.CreatorStarRepository;
 import com.plateforme.user.service.CreatorFollowService;
 import com.plateforme.user.service.CreatorPortfolioService;
 import com.plateforme.user.service.CreatorSearchExpand;
@@ -54,6 +56,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.HashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -104,6 +107,8 @@ public class MarketplaceService {
     private final CreatorFollowRepository creatorFollowRepository;
     private final PublicMediaUrlResolver publicMediaUrlResolver;
     private final UserRepository userRepository;
+    private final CreatorPortfolioPostRepository creatorPortfolioPostRepository;
+    private final CreatorStarRepository creatorStarRepository;
 
     @Transactional(readOnly = true)
     public Page<CreatorProfileResponse> getCreators(String specialite, Boolean verified, Boolean available,
@@ -130,13 +135,15 @@ public class MarketplaceService {
         List<UUID> creatorIds = page.getContent().stream().map(p -> p.getUser().getId()).toList();
         Set<UUID> followedIds = creatorFollowService.getFollowedCreatorIds(viewerUserId, creatorIds);
         Map<UUID, Long> followerCounts = creatorFollowService.getFollowerCounts(creatorIds);
+        CardCounts counts = loadCardCounts(creatorIds);
 
         return page.map(profile -> toCreatorCard(
                 profile,
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
                 followedIds.contains(profile.getUser().getId()),
-                withDistance ? publishableDistanceKm(lat, lng, accuracyM, profile) : null));
+                withDistance ? publishableDistanceKm(lat, lng, accuracyM, profile) : null,
+                counts));
     }
 
     @Transactional(readOnly = true)
@@ -188,13 +195,15 @@ public class MarketplaceService {
         List<UUID> creatorIds = page.getContent().stream().map(p -> p.getUser().getId()).toList();
         Set<UUID> followedIds = creatorFollowService.getFollowedCreatorIds(viewerUserId, creatorIds);
         Map<UUID, Long> followerCounts = creatorFollowService.getFollowerCounts(creatorIds);
+        CardCounts counts = loadCardCounts(creatorIds);
 
         return page.map(profile -> toCreatorCard(
                 profile,
                 viewerUserId != null,
                 followerCounts.getOrDefault(profile.getUser().getId(), 0L),
                 followedIds.contains(profile.getUser().getId()),
-                withDistance ? publishableDistanceKm(lat, lng, accuracyM, profile) : null));
+                withDistance ? publishableDistanceKm(lat, lng, accuracyM, profile) : null,
+                counts));
     }
 
     @Transactional(readOnly = true)
@@ -314,7 +323,8 @@ public class MarketplaceService {
                 isFollowing,
                 portfolioPosts,
                 portfolioWorks,
-                null);
+                null,
+                false);
     }
 
     @Transactional(readOnly = true)
@@ -322,8 +332,38 @@ public class MarketplaceService {
         return creatorFollowRepository.findByFollower_IdOrderByCreatedAtDesc(followerId, pageable)
                 .map(follow -> {
                     UUID creatorId = follow.getCreator().getId();
-                    return getCreatorPublicProfile(creatorId, followerId);
+                    /* The following list renders the same cards as the directory. */
+                    CreatorProfile profile = creatorProfileRepository.findByUserIdAndUserDeletedAtIsNull(creatorId)
+                            .orElse(null);
+                    if (profile == null) {
+                        return getCreatorPublicProfile(creatorId, followerId);
+                    }
+                    return toCreatorCard(profile, true, creatorFollowService.getFollowerCount(creatorId), true, null,
+                            loadCardCounts(List.of(creatorId)));
                 });
+    }
+
+    /** Per-creator counters for a page of cards: four grouped queries instead of four per card. */
+    private record CardCounts(Map<UUID, Long> curated, Map<UUID, Long> contents,
+                              Map<UUID, Long> products, Map<UUID, Long> stars) {}
+
+    private CardCounts loadCardCounts(List<UUID> creatorIds) {
+        if (creatorIds.isEmpty()) {
+            return new CardCounts(Map.of(), Map.of(), Map.of(), Map.of());
+        }
+        return new CardCounts(
+                countsById(creatorPortfolioPostRepository.countPublicCuratedByCreatorIds(creatorIds)),
+                countsById(contentPostRepository.countByCreatorIds(creatorIds)),
+                countsById(productRepository.countPublishedByCreatorIds(creatorIds)),
+                countsById(creatorStarRepository.countByCreatorIds(creatorIds)));
+    }
+
+    private static Map<UUID, Long> countsById(List<Object[]> rows) {
+        Map<UUID, Long> counts = new HashMap<>();
+        for (Object[] row : rows) {
+            counts.put((UUID) row[0], ((Number) row[1]).longValue());
+        }
+        return counts;
     }
 
     private CreatorProfileResponse toCreatorCard(
@@ -331,17 +371,18 @@ public class MarketplaceService {
             boolean authenticated,
             long followerCount,
             boolean isFollowing,
-            Double distanceKm) {
+            Double distanceKm,
+            CardCounts counts) {
         User user = profile.getUser();
         UUID userId = user.getId();
         List<ProfilePortfolioWorkDto> portfolioWorks = safePortfolioWorks(profile.getPortfolioWorks());
-        long curatedCount = creatorPortfolioService.countPublicCuratedPosts(userId);
+        long curatedCount = counts.curated().getOrDefault(userId, 0L);
         long portfolioCount = !portfolioWorks.isEmpty() ? portfolioWorks.size() : curatedCount;
-        long contentCount = contentPostRepository.countByCreator_Id(userId);
-        long productCount = productRepository.countByCreator_IdAndIsPublishedTrue(userId);
+        long contentCount = counts.contents().getOrDefault(userId, 0L);
+        long productCount = counts.products().getOrDefault(userId, 0L);
 
         ResolvedPublicContact contact = resolvePublicContact(profile, user, authenticated);
-        long starCount = creatorStarService.getStarCount(userId);
+        long starCount = counts.stars().getOrDefault(userId, 0L);
 
         return buildResponse(
                 profile,
@@ -356,7 +397,8 @@ public class MarketplaceService {
                 isFollowing,
                 List.of(),
                 portfolioWorks,
-                distanceKm);
+                distanceKm,
+                true);
     }
 
     private CreatorProfileResponse buildResponse(
@@ -372,7 +414,11 @@ public class MarketplaceService {
             boolean isFollowing,
             List<ContentPostResponse> portfolioPosts,
             List<ProfilePortfolioWorkDto> portfolioWorks,
-            Double distanceKm) {
+            Double distanceKm,
+            boolean card) {
+        /* A list card only shows the fields MarketplaceCreatorSummary reads (frontend
+           normalizeCreatorSummary). The portfolio blocks — portfolioSettings alone weighs ~130 KB per
+           creator — are left out so a 20-card page stays a few dozen KB instead of megabytes. */
         long serviceCount = ProfileExtensionsSupport.countActiveServices(profile.getProfileServices());
         List<String> specialties = SpecialtyTaxonomy.normalizeSpecialties(
                 profile.getSpecialties(), profile.getSpecialite());
@@ -423,30 +469,30 @@ public class MarketplaceService {
                 contact.ctaLabel(),
                 contact.ctaUrl(),
                 contact.timezoneId(),
-                contact.experienceBlocks(),
+                card ? List.of() : contact.experienceBlocks(),
                 contact.yearsOfExperience(),
-                contact.strengthsToolsMastered(),
-                contact.profileStack(),
-                creatorProfileVisitRepository.countByCreatorUserId(profile.getUser().getId()),
+                card ? List.of() : contact.strengthsToolsMastered(),
+                card ? List.of() : contact.profileStack(),
+                card ? 0L : creatorProfileVisitRepository.countByCreatorUserId(profile.getUser().getId()),
                 contact.gender(),
                 contact.spokenLanguages(),
                 contact.profileServices(),
-                contact.faqItems(),
-                safeTeamMembers(profile.getTeamMembers()),
-                safeGalleryItems(profile.getGalleryItems()),
-                works,
-                profile.getAboutUs(),
-                contact.aboutSkills(),
-                contact.aboutStrengths(),
-                contact.aboutSystemsTools(),
-                contact.aboutInterests(),
-                contact.aboutEducation(),
+                card ? List.of() : contact.faqItems(),
+                card ? List.of() : safeTeamMembers(profile.getTeamMembers()),
+                card ? List.of() : safeGalleryItems(profile.getGalleryItems()),
+                card ? List.of() : works,
+                card ? null : profile.getAboutUs(),
+                card ? List.of() : contact.aboutSkills(),
+                card ? List.of() : contact.aboutStrengths(),
+                card ? List.of() : contact.aboutSystemsTools(),
+                card ? List.of() : contact.aboutInterests(),
+                card ? List.of() : contact.aboutEducation(),
                 contact.profileLinks(),
                 user.getCreatedAt(),
                 contact.responseTimeLabel(),
                 contact.responseTimeSampleCount(),
                 portfolioPosts.isEmpty() ? List.of() : List.copyOf(portfolioPosts),
-                PortfolioSettingsSupport.read(profile),
+                card ? null : PortfolioSettingsSupport.read(profile),
                 blankToNull(profile.getShopName()),
                 blankToNull(profile.getShopSellingFocus()),
                 blankToNull(profile.getShopDescription()),

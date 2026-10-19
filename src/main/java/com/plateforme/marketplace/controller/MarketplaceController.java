@@ -1,5 +1,6 @@
 package com.plateforme.marketplace.controller;
 
+import com.plateforme.shared.util.ClientIp;
 import com.plateforme.marketplace.dto.ContentPostResponse;
 import com.plateforme.marketplace.dto.CreatorProfileResponse;
 import com.plateforme.marketplace.dto.MarketplaceProductResponse;
@@ -80,7 +81,7 @@ public class MarketplaceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampCreatorPageSize(size));
         UUID viewerUserId = resolveViewerUserId(authentication);
         return ResponseEntity.ok(PagedResponse.fromPage(
                 marketplaceService.getCreators(
@@ -108,7 +109,7 @@ public class MarketplaceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
-        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(Math.max(page, 0), clampCreatorPageSize(size));
         UUID viewerUserId = resolveViewerUserId(authentication);
         return ResponseEntity.ok(PagedResponse.fromPage(
                 marketplaceService.searchCreators(
@@ -260,7 +261,7 @@ public class MarketplaceController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
-        int safeSize = Math.min(Math.max(size, 1), 1000);
+        int safeSize = Math.min(Math.max(size, 1), 200);
         Pageable pageable = PageRequest.of(page, safeSize, resolveProductSort(sort));
         UUID favoritesUserId = null;
         if (favoritesOnly) {
@@ -433,15 +434,12 @@ public class MarketplaceController {
         return ((User) authentication.getPrincipal()).getId();
     }
 
+    /** Public, unauthenticated list: an unbounded ?size= let one request load every profile. */
+    private static int clampCreatorPageSize(int size) {
+        return Math.min(Math.max(size, 1), 100);
+    }
+
     private static String resolveClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        String xri = request.getHeader("X-Real-IP");
-        if (xri != null && !xri.isBlank()) {
-            return xri.trim();
-        }
-        return request.getRemoteAddr();
+        return ClientIp.resolve(request);
     }
 }

@@ -1,8 +1,10 @@
 package com.plateforme.user.controller;
 
+import com.plateforme.auth.dto.ResendVerificationResponse;
 import com.plateforme.user.dto.AccountSecurityDto;
 import com.plateforme.user.dto.ChangePasswordRequest;
 import com.plateforme.user.dto.DeleteAccountRequest;
+import com.plateforme.user.dto.PasswordSetupCodeRequest;
 import com.plateforme.user.dto.UpdateUserSettingsDto;
 import com.plateforme.user.dto.UserSettingsDto;
 import com.plateforme.user.entity.User;
@@ -14,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -47,6 +50,15 @@ public class UserSettingsController {
     @GetMapping("/account/security")
     public ResponseEntity<AccountSecurityDto> getSecurity() {
         return ResponseEntity.ok(accountService.getSecurity(getCurrentUserId()));
+    }
+
+    @Operation(summary = "Email me a code to create my first password (accounts made with Google)")
+    @PostMapping("/account/password/code")
+    public ResponseEntity<ResendVerificationResponse> sendPasswordSetupCode(
+            @Valid @RequestBody(required = false) PasswordSetupCodeRequest request) {
+        String locale = request != null ? request.locale() : null;
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .body(new ResendVerificationResponse(accountService.sendPasswordSetupCode(getCurrentUserId(), locale)));
     }
 
     @Operation(summary = "Change (or set) my password")

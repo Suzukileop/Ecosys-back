@@ -1,5 +1,6 @@
 package com.plateforme.shared.ratelimit;
 
+import com.plateforme.shared.util.ClientIp;
 import io.github.bucket4j.Bandwidth;
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.ConsumptionProbe;
@@ -13,9 +14,11 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.time.Duration;
+
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Three-tier rate limiter for marketplace routes:
@@ -41,17 +44,29 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
     private final Map<String, Bucket> refreshBuckets  = new ConcurrentHashMap<>();
     private final Map<String, Bucket> verifyEmailBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> resendVerificationBuckets = new ConcurrentHashMap<>();
+    /* Same budgets as the e-mail-code routes: requesting a reset code costs like a resend, checking one
+       like verify-email — in their own buckets, so one flow can't use up the other's. */
+    private final Map<String, Bucket> forgotPasswordBuckets = new ConcurrentHashMap<>();
+    private final Map<String, Bucket> resetPasswordBuckets = new ConcurrentHashMap<>();
 
     // ── Marketplace buckets (keyed by userId or IP) ─────────────────────────
     private final Map<String, Bucket> mktPublicReadBuckets = new ConcurrentHashMap<>();
     private final Map<String, Bucket> mktAuthReadBuckets   = new ConcurrentHashMap<>();
     private final Map<String, Bucket> mktWriteBuckets      = new ConcurrentHashMap<>();
 
+    /* Every bucket ever created stayed in its map: one entry per IP / user seen since boot, never freed.
+       A full bucket holds no state worth keeping (a new one starts full too), so a periodic sweep drops
+       them. Runs inline, at most once per SWEEP_INTERVAL, on whichever request comes along. */
+    private static final long SWEEP_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(5);
+    private final AtomicLong nextSweepAt = new AtomicLong(System.nanoTime() + SWEEP_INTERVAL_NANOS);
+
     // ────────────────────────────────────────────────────────────────────────
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
+
+        sweepIdleBucketsIfDue();
 
         String path     = request.getRequestURI();
         String method   = request.getMethod();
@@ -99,6 +114,14 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
         if (path.equals("/api/auth/verify-email/resend")) {
             return new BucketEntry(clientIp,
                     resendVerificationBuckets.computeIfAbsent(clientIp, k -> bucket(props.authResendVerification())));
+        }
+        if (path.equals("/api/auth/password/forgot")) {
+            return new BucketEntry(clientIp,
+                    forgotPasswordBuckets.computeIfAbsent(clientIp, k -> bucket(props.authResendVerification())));
+        }
+        if (path.equals("/api/auth/password/reset")) {
+            return new BucketEntry(clientIp,
+                    resetPasswordBuckets.computeIfAbsent(clientIp, k -> bucket(props.authVerifyEmail())));
         }
         if (path.equals("/api/auth/refresh")) {
             return new BucketEntry(clientIp,
@@ -181,16 +204,31 @@ public class RateLimitingInterceptor implements HandlerInterceptor {
         return Bucket.builder().addLimit(limit).build();
     }
 
+    private void sweepIdleBucketsIfDue() {
+        long now = System.nanoTime();
+        long due = nextSweepAt.get();
+        if (now - due < 0 || !nextSweepAt.compareAndSet(due, now + SWEEP_INTERVAL_NANOS)) {
+            return;
+        }
+        dropFull(loginBuckets, props.authLogin());
+        dropFull(signupBuckets, props.authSignup());
+        dropFull(refreshBuckets, props.authRefresh());
+        dropFull(verifyEmailBuckets, props.authVerifyEmail());
+        dropFull(resendVerificationBuckets, props.authResendVerification());
+        dropFull(forgotPasswordBuckets, props.authResendVerification());
+        dropFull(resetPasswordBuckets, props.authVerifyEmail());
+        dropFull(mktPublicReadBuckets, props.marketplacePublicRead());
+        dropFull(mktAuthReadBuckets, props.marketplaceAuthRead());
+        dropFull(mktWriteBuckets, props.marketplaceWrite());
+    }
+
+    /** A bucket back at full capacity carries no state: a fresh one would start identical. */
+    private static void dropFull(Map<String, Bucket> buckets, int capacity) {
+        buckets.entrySet().removeIf(entry -> entry.getValue().getAvailableTokens() >= capacity);
+    }
+
     private String getClientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        String xri = request.getHeader("X-Real-IP");
-        if (xri != null && !xri.isBlank()) {
-            return xri;
-        }
-        return request.getRemoteAddr();
+        return ClientIp.resolve(request);
     }
 
     private enum MarketplaceTier { PUBLIC_READ, AUTH_READ, WRITE }

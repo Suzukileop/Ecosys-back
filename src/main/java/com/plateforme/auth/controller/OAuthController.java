@@ -4,6 +4,7 @@ import com.plateforme.auth.dto.AuthResponse;
 import com.plateforme.auth.dto.OAuthCompleteRegistrationRequest;
 import com.plateforme.auth.dto.OAuthExchangeRequest;
 import com.plateforme.auth.dto.OAuthPendingProfileResponse;
+import com.plateforme.auth.security.RefreshTokenCookies;
 import com.plateforme.auth.service.OAuthService;
 import com.plateforme.shared.exception.BusinessException;
 import com.plateforme.shared.exception.ServiceUnavailableException;
@@ -26,6 +27,7 @@ public class OAuthController {
     private static final String TEMPORARILY_UNAVAILABLE = "temporarily_unavailable";
 
     private final OAuthService oauthService;
+    private final RefreshTokenCookies refreshTokenCookies;
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Boolean>> status() {
@@ -70,7 +72,7 @@ public class OAuthController {
 
     @PostMapping("/exchange")
     public ResponseEntity<AuthResponse> exchange(@Valid @RequestBody OAuthExchangeRequest request) {
-        return ResponseEntity.ok(oauthService.exchangeCode(request.code()));
+        return refreshTokenCookies.issue(oauthService.exchangeCode(request.code()));
     }
 
     @GetMapping("/pending-registration")
@@ -82,6 +84,6 @@ public class OAuthController {
     public ResponseEntity<AuthResponse> completeRegistration(
             @Valid @RequestBody OAuthCompleteRegistrationRequest request
     ) {
-        return ResponseEntity.ok(oauthService.completeRegistration(request.code()));
+        return refreshTokenCookies.issue(oauthService.completeRegistration(request.code()));
     }
 }

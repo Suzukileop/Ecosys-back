@@ -3,11 +3,12 @@ package com.plateforme.shared.mail;
 import com.plateforme.shared.util.LogMasking;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 
+/* The fallback when no SMTP host is configured — the exact complement of JavaMailDeliveryService. */
 @Service
-@ConditionalOnMissingBean(JavaMailDeliveryService.class)
+@ConditionalOnExpression("'${spring.mail.host:}'.isBlank()")
 @Slf4j
 public class LoggingMailDeliveryService implements MailDeliveryService {
 

@@ -47,6 +47,18 @@ public interface CreatorPortfolioPostRepository extends JpaRepository<CreatorPor
             """)
     long countPublicCuratedByCreatorId(@Param("creatorUserId") UUID creatorUserId);
 
+    /** Grouped count for a page of creator cards: [creatorId, count] rows, creators with none omitted. */
+    @Query("""
+            SELECT cpp.creator.id, COUNT(cpp) FROM CreatorPortfolioPost cpp
+            JOIN cpp.contentPost cp
+            WHERE cpp.creator.id IN :creatorUserIds
+            AND cp.isPublic = true
+            AND cp.deletedAt IS NULL
+            AND cp.archivedAt IS NULL
+            GROUP BY cpp.creator.id
+            """)
+    List<Object[]> countPublicCuratedByCreatorIds(@Param("creatorUserIds") java.util.Collection<UUID> creatorUserIds);
+
     @Modifying
     @Query("DELETE FROM CreatorPortfolioPost cpp WHERE cpp.creator.id = :creatorUserId")
     void deleteAllByCreatorUserId(@Param("creatorUserId") UUID creatorUserId);

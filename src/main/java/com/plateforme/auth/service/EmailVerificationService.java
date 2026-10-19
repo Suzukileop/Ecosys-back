@@ -23,7 +23,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * One-time e-mail verification codes for local sign-ups.
+ * One-time codes e-mailed to prove ownership of an inbox — for a local sign-up, and for setting or
+ * resetting a password (see {@link VerificationCodePurpose}; each purpose has its own keys, limits and
+ * e-mail, so a code only ever unlocks the action it was sent for).
  *
  * <ul>
  *   <li>6 digits from {@link SecureRandom}, valid {@value #CODE_TTL_MINUTES} minutes;</li>
@@ -44,9 +46,6 @@ public class EmailVerificationService {
     static final int MAX_ATTEMPTS = 5;
     static final int MAX_SENDS_PER_HOUR = 5;
 
-    private static final String CODE_KEY = "email-verify:code:";
-    private static final String COOLDOWN_KEY = "email-verify:cooldown:";
-    private static final String SENDS_KEY = "email-verify:sends:";
     private static final String FIELD_HASH = "hash";
     private static final String FIELD_ATTEMPTS = "attempts";
 
@@ -58,23 +57,30 @@ public class EmailVerificationService {
     @Value("${app.jwt.secret}")
     private String hmacKey;
 
+    /** {@link #sendCode(User, String, VerificationCodePurpose)} for a sign-up address. */
+    public long sendCode(User user, String locale) {
+        return sendCode(user, locale, VerificationCodePurpose.EMAIL_VERIFICATION);
+    }
+
     /**
      * Sends a fresh code unless one was sent less than {@value #RESEND_COOLDOWN_SECONDS}s ago.
      *
      * @return seconds before another code can be requested
      * @throws BusinessException {@code TOO_MANY_VERIFICATION_EMAILS} past the hourly cap
      */
-    public long sendCode(User user, String locale) {
+    public long sendCode(User user, String locale, VerificationCodePurpose purpose) {
         String id = user.getId().toString();
+        String cooldownKey = cooldownKey(purpose, id);
         Boolean free = redisTemplate.opsForValue()
-                .setIfAbsent(COOLDOWN_KEY + id, "1", Duration.ofSeconds(RESEND_COOLDOWN_SECONDS));
+                .setIfAbsent(cooldownKey, "1", Duration.ofSeconds(RESEND_COOLDOWN_SECONDS));
         if (!Boolean.TRUE.equals(free)) {
-            return cooldownRemainingSeconds(user);
+            return cooldownRemainingSeconds(user, purpose);
         }
 
-        Long sends = redisTemplate.opsForValue().increment(SENDS_KEY + id);
+        String sendsKey = purpose.keyPrefix() + ":sends:" + id;
+        Long sends = redisTemplate.opsForValue().increment(sendsKey);
         if (sends != null && sends == 1) {
-            redisTemplate.expire(SENDS_KEY + id, Duration.ofHours(1));
+            redisTemplate.expire(sendsKey, Duration.ofHours(1));
         }
         if (sends != null && sends > MAX_SENDS_PER_HOUR) {
             throw new BusinessException(
@@ -83,25 +89,33 @@ public class EmailVerificationService {
         }
 
         String code = String.format("%06d", random.nextInt(1_000_000));
-        String key = CODE_KEY + id;
+        String key = codeKey(purpose, id);
         redisTemplate.delete(key);
         HashOperations<String, String, String> hash = redisTemplate.opsForHash();
-        hash.putAll(key, Map.of(FIELD_HASH, hmac(id, code), FIELD_ATTEMPTS, "0"));
+        hash.putAll(key, Map.of(FIELD_HASH, hmac(purpose, id, code), FIELD_ATTEMPTS, "0"));
         redisTemplate.expire(key, Duration.ofMinutes(CODE_TTL_MINUTES));
 
-        VerificationEmailTemplates.Email email =
-                VerificationEmailTemplates.render(locale, user.getFullName(), code, CODE_TTL_MINUTES);
+        VerificationEmailTemplates.Email email = VerificationEmailTemplates.render(
+                purpose.emailKind(), locale, user.getFullName(), code, CODE_TTL_MINUTES);
         mailDeliveryService.sendPlainText(user.getEmail(), email.subject(), email.body());
-        log.info("Code de vérification envoyé à {}", LogMasking.email(user.getEmail()));
+        log.info("Code {} envoyé à {}", purpose, LogMasking.email(user.getEmail()));
         return RESEND_COOLDOWN_SECONDS;
     }
 
-    /** Like {@link #sendCode} but never throws on the hourly cap — for flows where the code is a bonus. */
+    /** {@link #sendCodeQuietly(User, String, VerificationCodePurpose)} for a sign-up address. */
     public void sendCodeQuietly(User user, String locale) {
+        sendCodeQuietly(user, locale, VerificationCodePurpose.EMAIL_VERIFICATION);
+    }
+
+    /**
+     * Like {@link #sendCode} but never throws on the hourly cap — for flows where the code is a bonus,
+     * or whose answer must not differ between existing and unknown addresses.
+     */
+    public void sendCodeQuietly(User user, String locale, VerificationCodePurpose purpose) {
         try {
-            sendCode(user, locale);
+            sendCode(user, locale, purpose);
         } catch (BusinessException ex) {
-            log.info("Code de vérification non renvoyé à {}: {}", LogMasking.email(user.getEmail()), ex.getCode());
+            log.info("Code {} non renvoyé à {}: {}", purpose, LogMasking.email(user.getEmail()), ex.getCode());
         }
     }
 
@@ -112,8 +126,13 @@ public class EmailVerificationService {
      *                           or {@code INVALID_VERIFICATION_CODE}
      */
     public void verify(User user, String code) {
+        verify(user, code, VerificationCodePurpose.EMAIL_VERIFICATION);
+    }
+
+    /** Same checks as {@link #verify(User, String)}, against a code sent for {@code purpose}. */
+    public void verify(User user, String code, VerificationCodePurpose purpose) {
         String id = user.getId().toString();
-        String key = CODE_KEY + id;
+        String key = codeKey(purpose, id);
         HashOperations<String, String, String> hash = redisTemplate.opsForHash();
         String stored = hash.get(key, FIELD_HASH);
         if (stored == null) {
@@ -131,25 +150,42 @@ public class EmailVerificationService {
         String submitted = code == null ? "" : code.trim();
         boolean matches = MessageDigest.isEqual(
                 stored.getBytes(StandardCharsets.UTF_8),
-                hmac(id, submitted).getBytes(StandardCharsets.UTF_8));
+                hmac(purpose, id, submitted).getBytes(StandardCharsets.UTF_8));
         if (!matches) {
             throw new BusinessException("INVALID_VERIFICATION_CODE", "This code is incorrect. Check it and try again.");
         }
 
         redisTemplate.delete(key);
-        redisTemplate.delete(COOLDOWN_KEY + id);
+        redisTemplate.delete(cooldownKey(purpose, id));
     }
 
     public long cooldownRemainingSeconds(User user) {
-        Long ttl = redisTemplate.getExpire(COOLDOWN_KEY + user.getId(), TimeUnit.SECONDS);
+        return cooldownRemainingSeconds(user, VerificationCodePurpose.EMAIL_VERIFICATION);
+    }
+
+    public long cooldownRemainingSeconds(User user, VerificationCodePurpose purpose) {
+        Long ttl = redisTemplate.getExpire(cooldownKey(purpose, user.getId().toString()), TimeUnit.SECONDS);
         return ttl == null || ttl < 0 ? 0 : ttl;
     }
 
-    private String hmac(String userId, String code) {
+    private static String codeKey(VerificationCodePurpose purpose, String userId) {
+        return purpose.keyPrefix() + ":code:" + userId;
+    }
+
+    private static String cooldownKey(VerificationCodePurpose purpose, String userId) {
+        return purpose.keyPrefix() + ":cooldown:" + userId;
+    }
+
+    /* The sign-up purpose keeps its original input ("id:code"), so codes already in Redis when this
+       shipped stay valid; the others are prefixed, so equal digits never hash alike across purposes. */
+    private String hmac(VerificationCodePurpose purpose, String userId, String code) {
+        String input = purpose == VerificationCodePurpose.EMAIL_VERIFICATION
+                ? userId + ":" + code
+                : purpose.keyPrefix() + ":" + userId + ":" + code;
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(hmacKey.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal((userId + ":" + code).getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of().formatHex(mac.doFinal(input.getBytes(StandardCharsets.UTF_8)));
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("HmacSHA256 unavailable", e);
         }

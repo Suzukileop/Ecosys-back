@@ -5,14 +5,20 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+/*
+ * Keyed on the same property that makes Spring Boot create the JavaMailSender (spring.mail.host, or the
+ * SPRING_MAIL_HOST env var). Not @ConditionalOnBean(JavaMailSender.class): that condition only sees beans defined so
+ * far, and component scanning runs before auto-configuration, so it never matched — every e-mail
+ * (verification codes included) silently fell through to LoggingMailDeliveryService.
+ */
 @Service
-@ConditionalOnBean(JavaMailSender.class)
+@ConditionalOnProperty(prefix = "spring.mail", name = "host")
 @RequiredArgsConstructor
 @Slf4j
 public class JavaMailDeliveryService implements MailDeliveryService {
