@@ -39,20 +39,12 @@ public final class ImageRenditions {
 
     /**
      * Widths kept on disk. Mirrors the rungs the frontend asks for (see media-image-url.ts).
-     * The top rung matches {@link #CANONICAL_MAX_EDGE} so even a lightbox at full zoom is served a
-     * derivative rather than whatever the canonical file happens to be — which, for uploads that
-     * predate this pipeline, is still the untouched original.
+     * These are bounded delivery copies; the canonical source retains all original pixels.
      */
     public static final int[] DERIVATIVE_WIDTHS = {256, 640, 1280, 2048};
 
-    /** No display in the product is wider than this, so the canonical file is capped here. */
-    public static final int CANONICAL_MAX_EDGE = 2048;
-
-    private static final float JPEG_QUALITY = 0.82f;
-    private static final float DERIVATIVE_QUALITY = 0.78f;
-
-    /** Beyond this an upload is almost certainly a photo, not a crisp UI asset worth keeping lossless. */
-    private static final int PNG_RECOMPRESS_THRESHOLD_BYTES = 400_000;
+    // Preserve uploaded bytes as the canonical source. Only derived files are resampled.
+    private static final float DERIVATIVE_QUALITY = 0.85f;
 
     public record Rendition(int width, byte[] bytes, String contentType) {}
 
@@ -101,7 +93,7 @@ public final class ImageRenditions {
     }
 
     /**
-     * Decodes once, then builds the canonical file and every derivative narrower than the source.
+     * Retains canonical bytes unchanged and builds delivery copies narrower than the source.
      * Empty when the payload is not a still image this can re-encode — the caller then stores the
      * upload untouched.
      */
@@ -120,32 +112,8 @@ public final class ImageRenditions {
             int height = source.getHeight();
             boolean alpha = hasMeaningfulAlpha(source, contentType);
 
-            byte[] canonicalBytes;
-            String canonicalType;
-            int longest = Math.max(width, height);
-            boolean oversized = longest > CANONICAL_MAX_EDGE;
-            boolean heavyPng = !alpha && original.length > PNG_RECOMPRESS_THRESHOLD_BYTES;
-
-            if (!oversized && !heavyPng && original.length <= 1_200_000) {
-                /* Already small and well-encoded — re-encoding would only lose detail. */
-                canonicalBytes = original;
-                canonicalType = contentType;
-            } else {
-                BufferedImage canonical = oversized
-                        ? scaleToLongestEdge(source, CANONICAL_MAX_EDGE, alpha)
-                        : source;
-                canonicalType = alpha ? "image/png" : "image/jpeg";
-                byte[] encoded = encode(canonical, canonicalType, JPEG_QUALITY);
-                /* A re-encode that grew means the original was already better; keep it. */
-                boolean keepOriginal = encoded.length >= original.length && !oversized;
-                canonicalBytes = keepOriginal ? original : encoded;
-                if (keepOriginal) {
-                    canonicalType = contentType;
-                }
-                if (canonical != source) {
-                    canonical.flush();
-                }
-            }
+            byte[] canonicalBytes = original;
+            String canonicalType = contentType;
 
             String derivativeType = alpha ? "image/png" : "image/jpeg";
             List<Rendition> derivatives = new ArrayList<>(DERIVATIVE_WIDTHS.length);
@@ -245,14 +213,6 @@ public final class ImageRenditions {
         return false;
     }
 
-    private static BufferedImage scaleToLongestEdge(BufferedImage source, int maxEdge, boolean alpha) {
-        int longest = Math.max(source.getWidth(), source.getHeight());
-        double scale = (double) maxEdge / longest;
-        int w = Math.max(1, (int) Math.round(source.getWidth() * scale));
-        int h = Math.max(1, (int) Math.round(source.getHeight() * scale));
-        return scaleTo(source, w, h, alpha);
-    }
-
     private static BufferedImage scaleToWidth(BufferedImage source, int targetWidth, boolean alpha) {
         int h = Math.max(1, Math.round(source.getHeight() * (targetWidth / (float) source.getWidth())));
         return scaleTo(source, targetWidth, h, alpha);
@@ -261,7 +221,7 @@ public final class ImageRenditions {
     private static BufferedImage scaleTo(BufferedImage source, int w, int h, boolean alpha) {
         BufferedImage dest = new BufferedImage(w, h, alpha ? BufferedImage.TYPE_INT_ARGB : BufferedImage.TYPE_INT_RGB);
         Graphics2D graphics = dest.createGraphics();
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
         graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         graphics.drawImage(source, 0, 0, w, h, null);
